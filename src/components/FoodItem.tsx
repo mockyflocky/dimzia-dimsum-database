@@ -1,8 +1,9 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { FoodItem as FoodItemType } from '@/lib/data';
 import { cn } from '@/lib/utils';
+import { ShoppingCart, Plus, Minus } from 'lucide-react';
 
 interface FoodItemProps {
   item: FoodItemType;
@@ -10,6 +11,18 @@ interface FoodItemProps {
 }
 
 const FoodItem: React.FC<FoodItemProps> = ({ item, index }) => {
+  const [count, setCount] = useState(0);
+
+  const incrementCount = () => {
+    setCount(prev => prev + 1);
+  };
+
+  const decrementCount = () => {
+    if (count > 0) {
+      setCount(prev => prev - 1);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -60,13 +73,39 @@ const FoodItem: React.FC<FoodItemProps> = ({ item, index }) => {
             {item.category}
           </span>
           
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="text-sm font-medium text-white bg-dimzia-primary hover:bg-dimzia-dark rounded-full px-3 py-1 transition-colors"
-          >
-            Order
-          </motion.button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border border-gray-200 rounded-full overflow-hidden">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={decrementCount}
+                className="px-2 py-1 text-gray-500 hover:bg-gray-100 transition-colors focus:outline-none"
+                disabled={count === 0}
+              >
+                <Minus size={16} className={count === 0 ? "opacity-50" : ""} />
+              </motion.button>
+              
+              <span className="px-2 min-w-[30px] text-center">
+                {count}
+              </span>
+              
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={incrementCount}
+                className="px-2 py-1 text-gray-500 hover:bg-gray-100 transition-colors focus:outline-none"
+              >
+                <Plus size={16} />
+              </motion.button>
+            </div>
+            
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="text-sm font-medium text-white bg-dimzia-primary hover:bg-dimzia-dark rounded-full p-2 transition-colors"
+              onClick={incrementCount}
+            >
+              <ShoppingCart size={16} />
+            </motion.button>
+          </div>
         </div>
       </div>
     </motion.div>
