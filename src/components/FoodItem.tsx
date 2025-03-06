@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { FoodItem as FoodItemType } from '@/lib/data';
 import { cn } from '@/lib/utils';
 import { ShoppingCart, Plus, Minus } from 'lucide-react';
+import { useCart } from '@/hooks/useCart';
 
 interface FoodItemProps {
   item: FoodItemType;
@@ -12,6 +13,7 @@ interface FoodItemProps {
 
 const FoodItem: React.FC<FoodItemProps> = ({ item, index }) => {
   const [count, setCount] = useState(0);
+  const { addToCart } = useCart();
 
   const incrementCount = () => {
     setCount(prev => prev + 1);
@@ -20,6 +22,13 @@ const FoodItem: React.FC<FoodItemProps> = ({ item, index }) => {
   const decrementCount = () => {
     if (count > 0) {
       setCount(prev => prev - 1);
+    }
+  };
+
+  const handleAddToCart = () => {
+    if (count > 0) {
+      addToCart(item, count);
+      setCount(0);
     }
   };
 
@@ -101,7 +110,8 @@ const FoodItem: React.FC<FoodItemProps> = ({ item, index }) => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="text-sm font-medium text-white bg-dimzia-primary hover:bg-dimzia-dark rounded-full p-2 transition-colors"
-              onClick={incrementCount}
+              onClick={handleAddToCart}
+              disabled={count === 0}
             >
               <ShoppingCart size={16} />
             </motion.button>
