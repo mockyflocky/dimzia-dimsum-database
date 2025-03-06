@@ -29,7 +29,7 @@ const Checkout = () => {
 
     // Format the order message for WhatsApp
     const orderItems = cart.map(
-      ({ item, quantity }) => `${quantity}x ${item.name} ($${(item.price * quantity).toFixed(2)})`
+      ({ item, quantity }) => `${quantity}x ${item.name} (Rp ${(item.price * 15000 * quantity).toLocaleString('id-ID')})`
     ).join('\n');
     
     const message = `
@@ -42,7 +42,7 @@ ${deliveryMethod === DeliveryMethod.DELIVERY ? `*Address:* ${address}\n` : ''}
 ${orderItems}
 -----------------------------
 *Total Items:* ${totalItems}
-*Total Price:* $${totalPrice.toFixed(2)}
+*Total Price:* Rp ${(totalPrice * 15000).toLocaleString('id-ID')}
     `;
     
     // Create WhatsApp link (you'll replace the phone number)
@@ -108,7 +108,7 @@ ${orderItems}
                   />
                   <div>
                     <h3 className="font-medium text-gray-900">{item.name}</h3>
-                    <p className="text-dimzia-primary">${item.price.toFixed(2)} each</p>
+                    <p className="text-dimzia-primary">Rp {(item.price * 15000).toLocaleString('id-ID')} each</p>
                   </div>
                 </div>
                 
@@ -146,7 +146,7 @@ ${orderItems}
           
           <div className="flex justify-between pt-4 border-t border-gray-200 font-semibold text-lg">
             <span>Total:</span>
-            <span>${totalPrice.toFixed(2)}</span>
+            <span>Rp {(totalPrice * 15000).toLocaleString('id-ID')}</span>
           </div>
         </div>
 

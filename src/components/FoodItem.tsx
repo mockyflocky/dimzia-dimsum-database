@@ -60,7 +60,7 @@ const FoodItem: React.FC<FoodItemProps> = ({ item, index }) => {
             {item.name}
           </h3>
           <span className="font-medium text-dimzia-primary">
-            ${item.price.toFixed(2)}
+            Rp {(item.price * 15000).toLocaleString('id-ID')}
           </span>
         </div>
         
