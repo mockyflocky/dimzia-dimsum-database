@@ -29,13 +29,38 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
     
     const animateElements = () => {
       elements.forEach((element, index) => {
+        // Reset styles before animating
         element.style.opacity = '0';
+        element.style.transform = animation === 'slide' ? 'translateY(20px)' : 'none';
+        
+        // Add animation
         element.style.animation = animation === 'fade' 
           ? 'fade-in 0.5s forwards' 
           : 'slide-up 0.7s forwards';
         element.style.animationDelay = `${delay * index}s`;
       });
     };
+
+    // Add necessary keyframes to document
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      
+      @keyframes slide-up {
+        from { 
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    `;
+    document.head.appendChild(style);
     
     if (once) {
       animateElements();
@@ -54,8 +79,15 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
       }, { threshold: 0.1 });
       
       observer.observe(container);
-      return () => observer.disconnect();
+      return () => {
+        observer.disconnect();
+        document.head.removeChild(style);
+      };
     }
+
+    return () => {
+      document.head.removeChild(style);
+    };
   }, [text, delay, animation, once]);
   
   const renderContent = () => {
