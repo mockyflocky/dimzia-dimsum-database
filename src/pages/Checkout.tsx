@@ -1,13 +1,20 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useCart } from '@/hooks/useCart';
 import { ArrowLeft, Plus, Minus, Trash2, Send } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase } from "@/integrations/supabase/client";
 
 enum DeliveryMethod {
   PICKUP = 'Ambil Sendiri',
   DELIVERY = 'Delivery (20 min+)'
+}
+
+interface DeliveryZone {
+  id: string;
+  zone_name: string;
+  base_price: number;
 }
 
 const Checkout = () => {
@@ -15,6 +22,42 @@ const Checkout = () => {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(DeliveryMethod.PICKUP);
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+  const [selectedZone, setSelectedZone] = useState<string>('');
+  const [deliveryCost, setDeliveryCost] = useState<number>(0);
+
+  useEffect(() => {
+    const fetchDeliveryZones = async () => {
+      const { data, error } = await supabase
+        .from('delivery_zones')
+        .select('*')
+        .order('base_price', { ascending: true });
+      
+      if (error) {
+        console.error('Error fetching delivery zones:', error);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        setDeliveryZones(data);
+        setSelectedZone(data[0].id);
+        setDeliveryCost(data[0].base_price);
+      }
+    };
+    
+    fetchDeliveryZones();
+  }, []);
+
+  useEffect(() => {
+    if (deliveryMethod === DeliveryMethod.PICKUP) {
+      setDeliveryCost(0);
+    } else if (deliveryMethod === DeliveryMethod.DELIVERY && selectedZone) {
+      const zone = deliveryZones.find(zone => zone.id === selectedZone);
+      if (zone) {
+        setDeliveryCost(zone.base_price);
+      }
+    }
+  }, [deliveryMethod, selectedZone, deliveryZones]);
 
   const handleSendOrder = () => {
     if (!name) {
@@ -37,16 +80,18 @@ const Checkout = () => {
 -----------------------------
 *Name:* ${name}
 *Delivery Method:* ${deliveryMethod}
-${deliveryMethod === DeliveryMethod.DELIVERY ? `*Address:* ${address}\n` : ''}
+${deliveryMethod === DeliveryMethod.DELIVERY ? 
+  `*Address:* ${address}\n*Delivery Zone:* ${deliveryZones.find(zone => zone.id === selectedZone)?.zone_name}\n*Delivery Cost:* Rp ${deliveryCost.toLocaleString('id-ID')}\n` : ''}
 *Order Details:*
 ${orderItems}
 -----------------------------
 *Total Items:* ${totalItems}
-*Total Price:* Rp ${(totalPrice * 15000).toLocaleString('id-ID')}
+*Subtotal:* Rp ${(totalPrice * 15000).toLocaleString('id-ID')}
+${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCost.toLocaleString('id-ID')}\n*Grand Total:* Rp ${(totalPrice * 15000 + deliveryCost).toLocaleString('id-ID')}` : ''}
     `;
     
     // Create WhatsApp link (you'll replace the phone number)
-    const phoneNumber = '1234567890'; // Replace with your actual WhatsApp number
+    const phoneNumber = '6281234567890'; // Replace with your actual WhatsApp number
     const encodedMessage = encodeURIComponent(message);
     const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
     
@@ -108,7 +153,7 @@ ${orderItems}
                   />
                   <div>
                     <h3 className="font-medium text-gray-900">{item.name}</h3>
-                    <p className="text-dimzia-primary">Rp {(item.price * 15000).toLocaleString('id-ID')} each</p>
+                    <p className="text-dimzia-primary">Rp {(item.price * 15000).toLocaleString('id-ID')}</p>
                   </div>
                 </div>
                 
@@ -145,9 +190,23 @@ ${orderItems}
           </div>
           
           <div className="flex justify-between pt-4 border-t border-gray-200 font-semibold text-lg">
-            <span>Total:</span>
+            <span>Subtotal:</span>
             <span>Rp {(totalPrice * 15000).toLocaleString('id-ID')}</span>
           </div>
+          
+          {deliveryMethod === DeliveryMethod.DELIVERY && (
+            <div className="flex justify-between pt-2 text-lg">
+              <span>Delivery:</span>
+              <span>Rp {deliveryCost.toLocaleString('id-ID')}</span>
+            </div>
+          )}
+          
+          {deliveryMethod === DeliveryMethod.DELIVERY && (
+            <div className="flex justify-between pt-2 font-bold text-lg text-dimzia-primary">
+              <span>Total:</span>
+              <span>Rp {(totalPrice * 15000 + deliveryCost).toLocaleString('id-ID')}</span>
+            </div>
+          )}
         </div>
 
         {/* Customer information */}
@@ -181,17 +240,35 @@ ${orderItems}
             </div>
             
             {deliveryMethod === DeliveryMethod.DELIVERY && (
-              <div>
-                <label htmlFor="address" className="block mb-1 font-medium text-gray-700">Alamat:</label>
-                <textarea
-                  id="address"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-dimzia-primary focus:border-transparent"
-                  rows={3}
-                  required
-                ></textarea>
-              </div>
+              <>
+                <div>
+                  <label htmlFor="zone" className="block mb-1 font-medium text-gray-700">Zone Pengiriman:</label>
+                  <select
+                    id="zone"
+                    value={selectedZone}
+                    onChange={(e) => setSelectedZone(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-dimzia-primary focus:border-transparent"
+                  >
+                    {deliveryZones.map(zone => (
+                      <option key={zone.id} value={zone.id}>
+                        {zone.zone_name} - Rp {zone.base_price.toLocaleString('id-ID')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label htmlFor="address" className="block mb-1 font-medium text-gray-700">Alamat:</label>
+                  <textarea
+                    id="address"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-dimzia-primary focus:border-transparent"
+                    rows={3}
+                    required
+                  ></textarea>
+                </div>
+              </>
             )}
           </div>
         </div>
