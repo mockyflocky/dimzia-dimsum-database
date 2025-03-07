@@ -16,6 +16,10 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Fixed admin credentials
+const ADMIN_EMAIL = 'dimziaadmin@dimzia.com';
+const ADMIN_PASSWORD = 'wicept53aman';
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -39,7 +43,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(initialSession?.user ?? null);
       
       if (initialSession?.user) {
-        await checkAdminStatus(initialSession.user.id);
+        checkAdminStatus(initialSession.user.email);
       }
       
       setIsLoading(false);
@@ -52,27 +56,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, []);
 
-  // Check if the current user is an admin
-  const checkAdminStatus = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('admin_users')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-    
-    if (error) {
-      console.error('Error checking admin status:', error);
-      setIsAdmin(false);
-      return;
-    }
-    
-    setIsAdmin(!!data);
+  // Simple check for fixed admin
+  const checkAdminStatus = (email?: string) => {
+    setIsAdmin(email === ADMIN_EMAIL);
   };
 
   // When user changes, check admin status
   useEffect(() => {
     if (user) {
-      checkAdminStatus(user.id);
+      checkAdminStatus(user.email);
     } else {
       setIsAdmin(false);
     }
@@ -80,14 +72,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      // For our fixed admin, we'll handle differently
+      if (email === ADMIN_EMAIL) {
+        // First, check if user exists
+        const { data: { user }, error: fetchError } = await supabase.auth.admin.getUserByEmail(ADMIN_EMAIL);
+        
+        if (fetchError || !user) {
+          // Create the admin account if it doesn't exist
+          const { error: signUpError } = await supabase.auth.signUp({ 
+            email: ADMIN_EMAIL, 
+            password: ADMIN_PASSWORD 
+          });
+          
+          if (signUpError) throw signUpError;
+        }
+      }
+      
+      // Then sign in
+      const { data, error } = await supabase.auth.signInWithPassword({ 
+        email, 
+        password 
+      });
       
       if (error) {
         throw error;
       }
       
       if (data.user) {
-        await checkAdminStatus(data.user.id);
+        checkAdminStatus(data.user.email);
       }
       
       toast({

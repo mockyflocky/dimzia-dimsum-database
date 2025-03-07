@@ -6,11 +6,10 @@ import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 
 const Auth = () => {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const { signIn, signUp, user } = useAuth();
+  const { user, signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -24,18 +23,24 @@ const Auth = () => {
     setIsLoading(true);
 
     try {
-      if (isLogin) {
-        await signIn(email, password);
+      // Check if credentials match the fixed admin user
+      if (username === 'dimziaadmin' && password === 'wicept53aman') {
+        await signIn('dimziaadmin@dimzia.com', 'wicept53aman');
         navigate('/admin');
       } else {
-        await signUp(email, password);
         toast({
-          title: "Check your email",
-          description: "We've sent you a confirmation link to activate your account.",
+          title: "Login failed",
+          description: "Invalid username or password",
+          variant: "destructive"
         });
       }
     } catch (error) {
       console.error('Authentication error:', error);
+      toast({
+        title: "Login failed",
+        description: "Please check your credentials and try again",
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
@@ -51,27 +56,27 @@ const Auth = () => {
       >
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            {isLogin ? 'Admin Login' : 'Create Admin Account'}
+            Admin Login
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            {isLogin ? "Sign in to manage your menu" : "Sign up for an admin account"}
+            Sign in to manage your menu
           </p>
         </div>
         
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label htmlFor="email-address" className="sr-only">Email address</label>
+              <label htmlFor="username" className="sr-only">Username</label>
               <input
-                id="email-address"
-                name="email"
-                type="email"
-                autoComplete="email"
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-dimzia-primary focus:border-dimzia-primary focus:z-10 sm:text-sm"
-                placeholder="Email address"
+                placeholder="Username"
               />
             </div>
             <div>
@@ -96,17 +101,7 @@ const Auth = () => {
               disabled={isLoading}
               className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-dimzia-primary hover:bg-dimzia-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-dimzia-primary ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
             >
-              {isLoading ? 'Processing...' : isLogin ? 'Sign in' : 'Sign up'}
-            </button>
-          </div>
-          
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              className="font-medium text-dimzia-primary hover:text-dimzia-dark"
-            >
-              {isLogin ? 'Need an account? Sign up' : 'Already have an account? Sign in'}
+              {isLoading ? 'Processing...' : 'Sign in'}
             </button>
           </div>
         </form>
