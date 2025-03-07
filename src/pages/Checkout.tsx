@@ -2,19 +2,16 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useCart } from '@/hooks/useCart';
-import { ArrowLeft, Plus, Minus, Trash2, Send, MapPin } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Trash2, Send, MapPin, Loader } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { supabase } from "@/integrations/supabase/client";
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import AnimatedText from '@/components/AnimatedText';
 
 enum DeliveryMethod {
   PICKUP = 'Ambil Sendiri',
   DELIVERY = 'Delivery (20 min+)'
-}
-
-interface DeliveryZone {
-  id: string;
-  zone_name: string;
-  base_price: number;
 }
 
 // Store coordinates (starting point)
@@ -23,55 +20,35 @@ const STORE_COORDINATES = {
   longitude: 113.92016284747595
 };
 
+// Cost per kilometer (in IDR)
+const COST_PER_KM = 3000;
+
 const Checkout = () => {
   const { cart, updateQuantity, removeFromCart, totalPrice, totalItems } = useCart();
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(DeliveryMethod.PICKUP);
-  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
-  const [selectedZone, setSelectedZone] = useState<string>('');
   const [deliveryCost, setDeliveryCost] = useState<number>(0);
+  const [distance, setDistance] = useState<number | null>(null);
   const [coordinates, setCoordinates] = useState<{latitude: number | null, longitude: number | null}>({
     latitude: null,
     longitude: null
   });
-
-  useEffect(() => {
-    const fetchDeliveryZones = async () => {
-      const { data, error } = await supabase
-        .from('delivery_zones')
-        .select('*')
-        .order('base_price', { ascending: true });
-      
-      if (error) {
-        console.error('Error fetching delivery zones:', error);
-        return;
-      }
-      
-      if (data && data.length > 0) {
-        setDeliveryZones(data);
-        setSelectedZone(data[0].id);
-        setDeliveryCost(data[0].base_price);
-      }
-    };
-    
-    fetchDeliveryZones();
-  }, []);
+  const [isLocating, setIsLocating] = useState(false);
 
   useEffect(() => {
     if (deliveryMethod === DeliveryMethod.PICKUP) {
       setDeliveryCost(0);
-    } else if (deliveryMethod === DeliveryMethod.DELIVERY && selectedZone) {
-      const zone = deliveryZones.find(zone => zone.id === selectedZone);
-      if (zone) {
-        setDeliveryCost(zone.base_price);
-      }
+    } else if (deliveryMethod === DeliveryMethod.DELIVERY && distance) {
+      // Calculate delivery cost based on distance (3,000 per km)
+      setDeliveryCost(Math.ceil(distance) * COST_PER_KM);
     }
-  }, [deliveryMethod, selectedZone, deliveryZones]);
+  }, [deliveryMethod, distance]);
 
   // Get user's location if they agree
   const getUserLocation = () => {
     if (navigator.geolocation) {
+      setIsLocating(true);
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setCoordinates({
@@ -79,23 +56,21 @@ const Checkout = () => {
             longitude: position.coords.longitude
           });
           
-          // Calculate distance and set appropriate zone
-          const distance = calculateDistance(
+          // Calculate distance
+          const calculatedDistance = calculateDistance(
             position.coords.latitude,
             position.coords.longitude,
             STORE_COORDINATES.latitude,
             STORE_COORDINATES.longitude
           );
           
-          // Find the appropriate zone based on distance
-          const appropriateZone = getZoneFromDistance(distance);
-          if (appropriateZone) {
-            setSelectedZone(appropriateZone.id);
-            setDeliveryCost(appropriateZone.base_price);
-          }
+          setDistance(calculatedDistance);
+          setDeliveryCost(Math.ceil(calculatedDistance) * COST_PER_KM);
+          setIsLocating(false);
         },
         (error) => {
           console.error("Error getting location:", error);
+          setIsLocating(false);
         }
       );
     } else {
@@ -122,21 +97,6 @@ const Checkout = () => {
     return value * Math.PI / 180;
   };
 
-  // Get the appropriate zone based on distance
-  const getZoneFromDistance = (distance: number) => {
-    // Simple logic to determine zone based on distance
-    if (distance <= 3) {
-      return deliveryZones.find(zone => zone.zone_name.includes("Zone 1"));
-    } else if (distance <= 5) {
-      return deliveryZones.find(zone => zone.zone_name.includes("Zone 2"));
-    } else if (distance <= 7) {
-      return deliveryZones.find(zone => zone.zone_name.includes("Zone 3"));
-    } else {
-      // If distance is greater than 7km, return the most expensive zone
-      return deliveryZones.sort((a, b) => b.base_price - a.base_price)[0];
-    }
-  };
-
   const handleSendOrder = () => {
     if (!name) {
       alert('Please enter your name');
@@ -159,7 +119,7 @@ const Checkout = () => {
 *Name:* ${name}
 *Delivery Method:* ${deliveryMethod}
 ${deliveryMethod === DeliveryMethod.DELIVERY ? 
-  `*Address:* ${address}\n*Delivery Zone:* ${deliveryZones.find(zone => zone.id === selectedZone)?.zone_name}\n*Delivery Cost:* Rp ${deliveryCost.toLocaleString('id-ID')}\n` : ''}
+  `*Address:* ${address}\n*Distance:* ${distance ? distance.toFixed(2) : '?'} km\n*Delivery Cost:* Rp ${deliveryCost.toLocaleString('id-ID')}\n` : ''}
 *Order Details:*
 ${orderItems}
 -----------------------------
@@ -294,12 +254,12 @@ ${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCo
           <div className="space-y-4">
             <div>
               <label htmlFor="name" className="block mb-1 font-medium text-gray-700">Nama:</label>
-              <input
+              <Input
                 type="text"
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-dimzia-primary focus:border-transparent"
+                className="w-full"
                 required
               />
             </div>
@@ -323,47 +283,43 @@ ${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCo
                   <MapPin className="text-blue-500 flex-shrink-0 mt-0.5" size={18} />
                   <div>
                     <p className="text-sm text-blue-700 font-medium">Share your location for delivery estimation</p>
-                    <p className="text-xs text-blue-600 mt-1 mb-2">We'll calculate the delivery zone based on your distance from our store</p>
-                    <button 
+                    <p className="text-xs text-blue-600 mt-1 mb-2">We'll calculate the delivery cost based on your distance (Rp {COST_PER_KM.toLocaleString('id-ID')} per km)</p>
+                    <Button 
                       onClick={getUserLocation}
+                      disabled={isLocating}
                       className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-full transition-colors"
+                      size="sm"
                     >
-                      Get My Location
-                    </button>
-                    {coordinates.latitude && coordinates.longitude && (
-                      <p className="text-xs text-blue-600 mt-2">
-                        Location detected! Zone updated accordingly.
-                      </p>
+                      {isLocating ? (
+                        <>
+                          <Loader size={14} className="animate-spin mr-1" /> 
+                          Getting Location...
+                        </>
+                      ) : (
+                        'Get My Location'
+                      )}
+                    </Button>
+                    {coordinates.latitude && coordinates.longitude && !isLocating && (
+                      <AnimatedText
+                        text={`Location detected! Distance: ${distance?.toFixed(2)} km (Delivery: Rp ${deliveryCost.toLocaleString('id-ID')})`}
+                        className="text-xs text-blue-600 mt-2"
+                        animation="fade"
+                        type="word"
+                      />
                     )}
                   </div>
                 </div>
                 
                 <div>
-                  <label htmlFor="zone" className="block mb-1 font-medium text-gray-700">Zone Pengiriman:</label>
-                  <select
-                    id="zone"
-                    value={selectedZone}
-                    onChange={(e) => setSelectedZone(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-dimzia-primary focus:border-transparent"
-                  >
-                    {deliveryZones.map(zone => (
-                      <option key={zone.id} value={zone.id}>
-                        {zone.zone_name} - Rp {zone.base_price.toLocaleString('id-ID')}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div>
                   <label htmlFor="address" className="block mb-1 font-medium text-gray-700">Alamat:</label>
-                  <textarea
+                  <Textarea
                     id="address"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-dimzia-primary focus:border-transparent"
+                    className="w-full"
                     rows={3}
                     required
-                  ></textarea>
+                  />
                 </div>
               </>
             )}
