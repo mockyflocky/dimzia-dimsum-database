@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useCart } from '@/hooks/useCart';
-import { ArrowLeft, Plus, Minus, Trash2, Send } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Trash2, Send, MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from "@/integrations/supabase/client";
 
@@ -17,6 +17,12 @@ interface DeliveryZone {
   base_price: number;
 }
 
+// Store coordinates (starting point)
+const STORE_COORDINATES = {
+  latitude: -2.2612092256138,
+  longitude: 113.92016284747595
+};
+
 const Checkout = () => {
   const { cart, updateQuantity, removeFromCart, totalPrice, totalItems } = useCart();
   const [name, setName] = useState('');
@@ -25,6 +31,10 @@ const Checkout = () => {
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [selectedZone, setSelectedZone] = useState<string>('');
   const [deliveryCost, setDeliveryCost] = useState<number>(0);
+  const [coordinates, setCoordinates] = useState<{latitude: number | null, longitude: number | null}>({
+    latitude: null,
+    longitude: null
+  });
 
   useEffect(() => {
     const fetchDeliveryZones = async () => {
@@ -58,6 +68,74 @@ const Checkout = () => {
       }
     }
   }, [deliveryMethod, selectedZone, deliveryZones]);
+
+  // Get user's location if they agree
+  const getUserLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCoordinates({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+          
+          // Calculate distance and set appropriate zone
+          const distance = calculateDistance(
+            position.coords.latitude,
+            position.coords.longitude,
+            STORE_COORDINATES.latitude,
+            STORE_COORDINATES.longitude
+          );
+          
+          // Find the appropriate zone based on distance
+          const appropriateZone = getZoneFromDistance(distance);
+          if (appropriateZone) {
+            setSelectedZone(appropriateZone.id);
+            setDeliveryCost(appropriateZone.base_price);
+          }
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+        }
+      );
+    } else {
+      console.error("Geolocation is not supported by this browser.");
+    }
+  };
+
+  // Calculate distance between two coordinates using Haversine formula
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Earth's radius in km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c; // Distance in km
+    return distance;
+  };
+
+  // Convert degrees to radians
+  const toRad = (value: number) => {
+    return value * Math.PI / 180;
+  };
+
+  // Get the appropriate zone based on distance
+  const getZoneFromDistance = (distance: number) => {
+    // Simple logic to determine zone based on distance
+    if (distance <= 3) {
+      return deliveryZones.find(zone => zone.zone_name.includes("Zone 1"));
+    } else if (distance <= 5) {
+      return deliveryZones.find(zone => zone.zone_name.includes("Zone 2"));
+    } else if (distance <= 7) {
+      return deliveryZones.find(zone => zone.zone_name.includes("Zone 3"));
+    } else {
+      // If distance is greater than 7km, return the most expensive zone
+      return deliveryZones.sort((a, b) => b.base_price - a.base_price)[0];
+    }
+  };
 
   const handleSendOrder = () => {
     if (!name) {
@@ -241,6 +319,25 @@ ${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCo
             
             {deliveryMethod === DeliveryMethod.DELIVERY && (
               <>
+                <div className="p-3 bg-blue-50 rounded-md border border-blue-100 flex items-start gap-2">
+                  <MapPin className="text-blue-500 flex-shrink-0 mt-0.5" size={18} />
+                  <div>
+                    <p className="text-sm text-blue-700 font-medium">Share your location for delivery estimation</p>
+                    <p className="text-xs text-blue-600 mt-1 mb-2">We'll calculate the delivery zone based on your distance from our store</p>
+                    <button 
+                      onClick={getUserLocation}
+                      className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-full transition-colors"
+                    >
+                      Get My Location
+                    </button>
+                    {coordinates.latitude && coordinates.longitude && (
+                      <p className="text-xs text-blue-600 mt-2">
+                        Location detected! Zone updated accordingly.
+                      </p>
+                    )}
+                  </div>
+                </div>
+                
                 <div>
                   <label htmlFor="zone" className="block mb-1 font-medium text-gray-700">Zone Pengiriman:</label>
                   <select

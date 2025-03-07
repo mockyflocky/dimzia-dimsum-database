@@ -1,204 +1,239 @@
 
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { Navigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { 
+  Plus, 
+  Trash2, 
+  Edit, 
+  Save, 
+  X, 
+  AlertTriangle, 
+  Image as ImageIcon,
+  MapPin 
+} from 'lucide-react';
+import { 
+  Table, 
+  TableHeader, 
+  TableRow, 
+  TableHead, 
+  TableBody, 
+  TableCell 
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter 
+} from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, Save, X } from 'lucide-react';
 
+// Define types for menu items and delivery zones
 interface MenuItem {
   id: string;
   name: string;
-  description: string;
+  description: string | null;
   price: number;
-  image_url: string;
+  image_url: string | null;
   category: string;
-  is_popular: boolean;
+  is_popular: boolean | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface DeliveryZone {
   id: string;
   zone_name: string;
   base_price: number;
+  created_at: string;
 }
 
+// Main admin component
 const Admin = () => {
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, isLoading } = useAuth();
+  const navigate = useNavigate();
   const { toast } = useToast();
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
-  const [activeTab, setActiveTab] = useState<'menu' | 'delivery'>('menu');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState<string | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
   
-  // Form states
-  const [formData, setFormData] = useState<Partial<MenuItem>>({
-    name: '',
-    description: '',
-    price: 0,
-    image_url: '',
-    category: 'steamed',
-    is_popular: false
-  });
+  const [activeTab, setActiveTab] = useState('menu');
   
-  const [zoneForm, setZoneForm] = useState<Partial<DeliveryZone>>({
-    zone_name: '',
-    base_price: 0
-  });
-
-  // If not logged in or not admin, redirect to auth page
-  if (!user) {
-    return <Navigate to="/auth" replace />;
-  }
-
-  if (!isAdmin) {
+  // Redirect if not authenticated or not admin
+  useEffect(() => {
+    if (!isLoading && (!user || !isAdmin)) {
+      navigate('/auth');
+      toast({
+        title: "Unauthorized",
+        description: "You must be an admin to access this page.",
+        variant: "destructive",
+      });
+    }
+  }, [user, isAdmin, isLoading, navigate, toast]);
+  
+  if (isLoading) {
     return (
-      <div className="min-h-screen pt-20 pb-16 flex flex-col items-center justify-center">
-        <div className="text-center p-8 max-w-xl">
-          <h1 className="font-serif text-2xl font-semibold text-gray-900 mb-4">Access Denied</h1>
-          <p className="text-gray-600 mb-6">You do not have admin permissions to access this page.</p>
-          <button
-            onClick={() => signOut()}
-            className="px-6 py-3 bg-dimzia-primary text-white rounded-full font-medium"
-          >
-            Sign Out
-          </button>
-        </div>
+      <div className="min-h-screen pt-20 flex items-center justify-center">
+        <div className="animate-spin h-12 w-12 border-4 border-dimzia-primary border-t-transparent rounded-full"></div>
       </div>
     );
   }
+  
+  if (!user || !isAdmin) {
+    return null; // Will redirect due to useEffect
+  }
+  
+  return (
+    <div className="min-h-screen pt-20 pb-16">
+      <div className="container mx-auto px-4">
+        <motion.h1
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="font-serif text-3xl font-bold text-gray-900 mb-6"
+        >
+          Admin Dashboard
+        </motion.h1>
+        
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid grid-cols-2 w-full max-w-md mb-6">
+            <TabsTrigger value="menu">Menu Management</TabsTrigger>
+            <TabsTrigger value="delivery">Delivery Zones</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="menu">
+            <MenuManagement />
+          </TabsContent>
+          
+          <TabsContent value="delivery">
+            <DeliveryManagement />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+};
 
+// Menu Management Component
+const MenuManagement = () => {
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editItem, setEditItem] = useState<Partial<MenuItem>>({});
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const { toast } = useToast();
+  
+  // Load menu items
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      
+    const fetchMenuItems = async () => {
       try {
-        // Fetch menu items
-        const { data: menuData, error: menuError } = await supabase
+        const { data, error } = await supabase
           .from('menu_items')
           .select('*')
-          .order('name');
+          .order('category', { ascending: true })
+          .order('name', { ascending: true });
         
-        if (menuError) throw menuError;
-        setMenuItems(menuData || []);
+        if (error) throw error;
         
-        // Fetch delivery zones
-        const { data: zoneData, error: zoneError } = await supabase
-          .from('delivery_zones')
-          .select('*')
-          .order('base_price');
-        
-        if (zoneError) throw zoneError;
-        setDeliveryZones(zoneData || []);
+        setMenuItems(data || []);
       } catch (error: any) {
+        console.error('Error fetching menu items:', error.message);
         toast({
-          title: 'Error loading data',
-          description: error.message,
-          variant: 'destructive',
+          title: "Error",
+          description: "Failed to load menu items.",
+          variant: "destructive",
         });
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
     
-    fetchData();
-  }, []);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
-    
-    if (type === 'checkbox') {
-      const target = e.target as HTMLInputElement;
-      setFormData(prev => ({ ...prev, [name]: target.checked }));
-    } else if (name === 'price') {
-      setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
-  };
-
-  const handleZoneInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    
-    if (name === 'base_price') {
-      setZoneForm(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
-    } else {
-      setZoneForm(prev => ({ ...prev, [name]: value }));
-    }
-  };
-
-  const handleAddItem = async () => {
+    fetchMenuItems();
+  }, [toast]);
+  
+  // Save or update menu item
+  const handleSave = async () => {
     try {
-      if (!formData.name || !formData.description || formData.price <= 0 || !formData.image_url || !formData.category) {
+      // Validate required fields
+      if (!editItem.name || !editItem.price || !editItem.category) {
         toast({
-          title: 'Missing fields',
-          description: 'Please fill in all required fields',
-          variant: 'destructive',
+          title: "Validation Error",
+          description: "Name, price, and category are required.",
+          variant: "destructive",
         });
         return;
       }
       
-      const { data, error } = await supabase
-        .from('menu_items')
-        .insert([formData])
-        .select()
-        .single();
+      const item = {
+        name: editItem.name,
+        description: editItem.description || null,
+        price: Number(editItem.price),
+        image_url: editItem.image_url || null,
+        category: editItem.category,
+        is_popular: editItem.is_popular || false
+      };
       
-      if (error) throw error;
+      if (isEditing && editItem.id) {
+        // Update existing item
+        const { error } = await supabase
+          .from('menu_items')
+          .update(item)
+          .eq('id', editItem.id);
+        
+        if (error) throw error;
+        
+        // Update local state
+        setMenuItems(prev => 
+          prev.map(i => i.id === editItem.id ? { ...i, ...item } as MenuItem : i)
+        );
+        
+        toast({
+          title: "Success",
+          description: "Menu item updated successfully.",
+        });
+      } else {
+        // Create new item
+        const { data, error } = await supabase
+          .from('menu_items')
+          .insert([item])
+          .select();
+        
+        if (error) throw error;
+        
+        // Update local state
+        if (data) {
+          setMenuItems(prev => [...prev, data[0] as MenuItem]);
+        }
+        
+        toast({
+          title: "Success",
+          description: "Menu item created successfully.",
+        });
+      }
       
-      setMenuItems(prev => [...prev, data]);
-      setIsAdding(false);
-      setFormData({
-        name: '',
-        description: '',
-        price: 0,
-        image_url: '',
-        category: 'steamed',
-        is_popular: false
-      });
-      
-      toast({
-        title: 'Menu item added successfully',
-      });
+      // Close dialog and reset form
+      setDialogOpen(false);
+      setEditItem({});
+      setIsEditing(false);
     } catch (error: any) {
+      console.error('Error saving menu item:', error.message);
       toast({
-        title: 'Error adding menu item',
-        description: error.message,
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to save menu item.",
+        variant: "destructive",
       });
     }
   };
-
-  const handleSaveItem = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('menu_items')
-        .update(formData)
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      setMenuItems(prev => prev.map(item => 
-        item.id === id ? { ...item, ...formData } as MenuItem : item
-      ));
-      
-      setIsEditing(null);
-      toast({
-        title: 'Menu item updated successfully',
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Error updating menu item',
-        description: error.message,
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleDeleteItem = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
+  
+  // Delete menu item
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this item?")) return;
     
     try {
       const { error } = await supabase
@@ -208,70 +243,323 @@ const Admin = () => {
       
       if (error) throw error;
       
+      // Update local state
       setMenuItems(prev => prev.filter(item => item.id !== id));
+      
       toast({
-        title: 'Menu item deleted successfully',
+        title: "Success",
+        description: "Menu item deleted successfully.",
       });
     } catch (error: any) {
+      console.error('Error deleting menu item:', error.message);
       toast({
-        title: 'Error deleting menu item',
-        description: error.message,
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to delete menu item.",
+        variant: "destructive",
       });
     }
   };
-
-  const startEditing = (item: MenuItem) => {
-    setFormData({
-      name: item.name,
-      description: item.description,
-      price: item.price,
-      image_url: item.image_url,
-      category: item.category,
-      is_popular: item.is_popular
+  
+  // Add new item
+  const handleAddNew = () => {
+    setEditItem({
+      name: '',
+      description: '',
+      price: 0,
+      image_url: '',
+      category: '',
+      is_popular: false
     });
-    setIsEditing(item.id);
+    setIsEditing(false);
+    setDialogOpen(true);
   };
+  
+  // Edit existing item
+  const handleEdit = (item: MenuItem) => {
+    setEditItem({ ...item });
+    setIsEditing(true);
+    setDialogOpen(true);
+  };
+  
+  if (loading) {
+    return (
+      <div className="flex justify-center my-8">
+        <div className="animate-spin h-8 w-8 border-4 border-dimzia-primary border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+  
+  // Group menu items by category
+  const menuByCategory = menuItems.reduce((acc, item) => {
+    if (!acc[item.category]) {
+      acc[item.category] = [];
+    }
+    acc[item.category].push(item);
+    return acc;
+  }, {} as Record<string, MenuItem[]>);
+  
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-serif font-semibold">Menu Items</h2>
+        <Button 
+          onClick={handleAddNew}
+          className="bg-dimzia-primary hover:bg-dimzia-primary/90"
+        >
+          <Plus size={16} className="mr-2" /> Add New Item
+        </Button>
+      </div>
+      
+      {Object.entries(menuByCategory).length === 0 ? (
+        <div className="text-center py-8 border rounded-lg bg-gray-50">
+          <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500 mb-2" />
+          <p className="text-gray-600">No menu items found. Add your first item to get started.</p>
+        </div>
+      ) : (
+        Object.entries(menuByCategory).map(([category, items]) => (
+          <div key={category} className="mb-8">
+            <h3 className="text-xl font-semibold mb-4 font-serif">{category}</h3>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Popular</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map(item => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell>Rp {(item.price * 15000).toLocaleString('id-ID')}</TableCell>
+                    <TableCell>{item.is_popular ? '✓' : '-'}</TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleEdit(item)}
+                      >
+                        <Edit size={16} />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleDelete(item.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ))
+      )}
+      
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{isEditing ? 'Edit Menu Item' : 'Add New Menu Item'}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="grid gap-4">
+              <Label htmlFor="name">Name</Label>
+              <Input 
+                id="name" 
+                value={editItem.name || ''} 
+                onChange={e => setEditItem({...editItem, name: e.target.value})}
+                placeholder="Item name"
+              />
+            </div>
+            
+            <div className="grid gap-4">
+              <Label htmlFor="category">Category</Label>
+              <Input 
+                id="category" 
+                value={editItem.category || ''} 
+                onChange={e => setEditItem({...editItem, category: e.target.value})}
+                placeholder="e.g., Dimsum, Drinks, etc."
+              />
+            </div>
+            
+            <div className="grid gap-4">
+              <Label htmlFor="price">Price</Label>
+              <Input 
+                id="price" 
+                type="number" 
+                step="0.01"
+                value={editItem.price || ''} 
+                onChange={e => setEditItem({...editItem, price: parseFloat(e.target.value)})}
+                placeholder="Price in USD"
+              />
+              <p className="text-sm text-gray-500">Note: Price will be displayed as Rp {editItem.price ? (parseFloat(editItem.price.toString()) * 15000).toLocaleString('id-ID') : '0'}</p>
+            </div>
+            
+            <div className="grid gap-4">
+              <Label htmlFor="description">Description</Label>
+              <Textarea 
+                id="description" 
+                value={editItem.description || ''} 
+                onChange={e => setEditItem({...editItem, description: e.target.value})}
+                placeholder="Item description"
+              />
+            </div>
+            
+            <div className="grid gap-4">
+              <Label htmlFor="image_url">Image URL</Label>
+              <Input 
+                id="image_url" 
+                value={editItem.image_url || ''} 
+                onChange={e => setEditItem({...editItem, image_url: e.target.value})}
+                placeholder="https://example.com/image.jpg"
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="is_popular"
+                checked={!!editItem.is_popular}
+                onChange={e => setEditItem({...editItem, is_popular: e.target.checked})}
+                className="h-4 w-4 rounded border-gray-300 text-dimzia-primary focus:ring-dimzia-primary"
+              />
+              <Label htmlFor="is_popular">Popular Item</Label>
+            </div>
+          </div>
+          
+          <DialogFooter className="flex space-x-2 sm:justify-between">
+            <Button 
+              variant="outline" 
+              onClick={() => setDialogOpen(false)}
+            >
+              <X size={16} className="mr-2" /> Cancel
+            </Button>
+            <Button 
+              onClick={handleSave}
+              className="bg-dimzia-primary hover:bg-dimzia-primary/90"
+            >
+              <Save size={16} className="mr-2" /> {isEditing ? 'Update' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
 
-  const handleAddZone = async () => {
-    try {
-      if (!zoneForm.zone_name || zoneForm.base_price <= 0) {
+// Delivery Management Component
+const DeliveryManagement = () => {
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editZone, setEditZone] = useState<Partial<DeliveryZone>>({});
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const { toast } = useToast();
+  
+  // Load delivery zones
+  useEffect(() => {
+    const fetchDeliveryZones = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('delivery_zones')
+          .select('*')
+          .order('base_price', { ascending: true });
+        
+        if (error) throw error;
+        
+        setDeliveryZones(data || []);
+      } catch (error: any) {
+        console.error('Error fetching delivery zones:', error.message);
         toast({
-          title: 'Missing fields',
-          description: 'Please fill in all required fields',
-          variant: 'destructive',
+          title: "Error",
+          description: "Failed to load delivery zones.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchDeliveryZones();
+  }, [toast]);
+  
+  // Save or update delivery zone
+  const handleSave = async () => {
+    try {
+      // Validate required fields
+      if (!editZone.zone_name || editZone.base_price === undefined) {
+        toast({
+          title: "Validation Error",
+          description: "Zone name and price are required.",
+          variant: "destructive",
         });
         return;
       }
       
-      const { data, error } = await supabase
-        .from('delivery_zones')
-        .insert([zoneForm])
-        .select()
-        .single();
+      const zone = {
+        zone_name: editZone.zone_name,
+        base_price: Number(editZone.base_price)
+      };
       
-      if (error) throw error;
+      if (isEditing && editZone.id) {
+        // Update existing zone
+        const { error } = await supabase
+          .from('delivery_zones')
+          .update(zone)
+          .eq('id', editZone.id);
+        
+        if (error) throw error;
+        
+        // Update local state
+        setDeliveryZones(prev => 
+          prev.map(z => z.id === editZone.id ? { ...z, ...zone } as DeliveryZone : z)
+        );
+        
+        toast({
+          title: "Success",
+          description: "Delivery zone updated successfully.",
+        });
+      } else {
+        // Create new zone
+        const { data, error } = await supabase
+          .from('delivery_zones')
+          .insert([zone])
+          .select();
+        
+        if (error) throw error;
+        
+        // Update local state
+        if (data) {
+          setDeliveryZones(prev => [...prev, data[0] as DeliveryZone]);
+        }
+        
+        toast({
+          title: "Success",
+          description: "Delivery zone created successfully.",
+        });
+      }
       
-      setDeliveryZones(prev => [...prev, data]);
-      setZoneForm({
-        zone_name: '',
-        base_price: 0
-      });
-      
-      toast({
-        title: 'Delivery zone added successfully',
-      });
+      // Close dialog and reset form
+      setDialogOpen(false);
+      setEditZone({});
+      setIsEditing(false);
     } catch (error: any) {
+      console.error('Error saving delivery zone:', error.message);
       toast({
-        title: 'Error adding delivery zone',
-        description: error.message,
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to save delivery zone.",
+        variant: "destructive",
       });
     }
   };
-
-  const handleDeleteZone = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this delivery zone?')) return;
+  
+  // Delete delivery zone
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this zone?")) return;
     
     try {
       const { error } = await supabase
@@ -281,416 +569,155 @@ const Admin = () => {
       
       if (error) throw error;
       
+      // Update local state
       setDeliveryZones(prev => prev.filter(zone => zone.id !== id));
+      
       toast({
-        title: 'Delivery zone deleted successfully',
+        title: "Success",
+        description: "Delivery zone deleted successfully.",
       });
     } catch (error: any) {
+      console.error('Error deleting delivery zone:', error.message);
       toast({
-        title: 'Error deleting delivery zone',
-        description: error.message,
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to delete delivery zone.",
+        variant: "destructive",
       });
     }
   };
-
-  return (
-    <div className="min-h-screen pt-20 pb-16">
-      <div className="container mx-auto px-4 max-w-6xl">
-        <div className="flex justify-between items-center mb-6">
-          <motion.h1
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="font-serif text-3xl font-bold text-gray-900"
-          >
-            Admin Dashboard
-          </motion.h1>
-          
-          <button
-            onClick={() => signOut()}
-            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
-          >
-            Sign Out
-          </button>
-        </div>
-        
-        {/* Tabs */}
-        <div className="flex border-b border-gray-200 mb-6">
-          <button
-            onClick={() => setActiveTab('menu')}
-            className={`px-4 py-2 font-medium ${activeTab === 'menu' ? 'text-dimzia-primary border-b-2 border-dimzia-primary' : 'text-gray-600'}`}
-          >
-            Menu Items
-          </button>
-          <button
-            onClick={() => setActiveTab('delivery')}
-            className={`px-4 py-2 font-medium ${activeTab === 'delivery' ? 'text-dimzia-primary border-b-2 border-dimzia-primary' : 'text-gray-600'}`}
-          >
-            Delivery Zones
-          </button>
-        </div>
-        
-        {isLoading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-dimzia-primary"></div>
-          </div>
-        ) : (
-          <>
-            {activeTab === 'menu' && (
-              <div>
-                <div className="mb-4 flex justify-between items-center">
-                  <h2 className="text-xl font-semibold">Menu Items</h2>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setIsAdding(true)}
-                    className="flex items-center gap-1 px-3 py-2 bg-dimzia-primary text-white rounded-md hover:bg-dimzia-dark transition-colors"
-                    disabled={isAdding}
-                  >
-                    <PlusCircle size={16} />
-                    Add Item
-                  </motion.button>
-                </div>
-                
-                {isAdding && (
-                  <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                    <h3 className="font-medium text-lg mb-4">Add New Menu Item</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                        <input
-                          type="text"
-                          name="name"
-                          value={formData.name}
-                          onChange={handleInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-dimzia-primary"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Price (in thousands IDR)</label>
-                        <input
-                          type="number"
-                          name="price"
-                          value={formData.price}
-                          onChange={handleInputChange}
-                          step="0.01"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-dimzia-primary"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                        <select
-                          name="category"
-                          value={formData.category}
-                          onChange={handleInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-dimzia-primary"
-                        >
-                          <option value="steamed">Steamed</option>
-                          <option value="fried">Fried</option>
-                          <option value="baked">Baked</option>
-                          <option value="dessert">Dessert</option>
-                          <option value="special">Special</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
-                        <input
-                          type="text"
-                          name="image_url"
-                          value={formData.image_url}
-                          onChange={handleInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-dimzia-primary"
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                        <textarea
-                          name="description"
-                          value={formData.description}
-                          onChange={handleInputChange}
-                          rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-dimzia-primary"
-                        ></textarea>
-                      </div>
-                      <div className="flex items-center">
-                        <input
-                          type="checkbox"
-                          id="is_popular"
-                          name="is_popular"
-                          checked={formData.is_popular}
-                          onChange={(e) => setFormData(prev => ({ ...prev, is_popular: e.target.checked }))}
-                          className="h-4 w-4 text-dimzia-primary focus:ring-dimzia-primary border-gray-300 rounded"
-                        />
-                        <label htmlFor="is_popular" className="ml-2 block text-sm text-gray-900">
-                          Popular Item
-                        </label>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex justify-end gap-2">
-                      <button
-                        onClick={() => {
-                          setIsAdding(false);
-                          setFormData({
-                            name: '',
-                            description: '',
-                            price: 0,
-                            image_url: '',
-                            category: 'steamed',
-                            is_popular: false
-                          });
-                        }}
-                        className="px-3 py-1 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleAddItem}
-                        className="px-3 py-1 bg-dimzia-primary text-white rounded-md hover:bg-dimzia-dark"
-                      >
-                        Add Item
-                      </button>
-                    </div>
-                  </div>
-                )}
-                
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Popular</th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {menuItems.map(item => (
-                        <tr key={item.id}>
-                          {isEditing === item.id ? (
-                            <>
-                              <td className="px-6 py-4 space-y-2">
-                                <input
-                                  type="text"
-                                  name="name"
-                                  value={formData.name}
-                                  onChange={handleInputChange}
-                                  className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                  placeholder="Name"
-                                />
-                                <textarea
-                                  name="description"
-                                  value={formData.description}
-                                  onChange={handleInputChange}
-                                  rows={2}
-                                  className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                  placeholder="Description"
-                                ></textarea>
-                                <input
-                                  type="text"
-                                  name="image_url"
-                                  value={formData.image_url}
-                                  onChange={handleInputChange}
-                                  className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                  placeholder="Image URL"
-                                />
-                              </td>
-                              <td className="px-6 py-4">
-                                <input
-                                  type="number"
-                                  name="price"
-                                  value={formData.price}
-                                  onChange={handleInputChange}
-                                  step="0.01"
-                                  className="w-24 px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                />
-                              </td>
-                              <td className="px-6 py-4">
-                                <select
-                                  name="category"
-                                  value={formData.category}
-                                  onChange={handleInputChange}
-                                  className="px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                >
-                                  <option value="steamed">Steamed</option>
-                                  <option value="fried">Fried</option>
-                                  <option value="baked">Baked</option>
-                                  <option value="dessert">Dessert</option>
-                                  <option value="special">Special</option>
-                                </select>
-                              </td>
-                              <td className="px-6 py-4">
-                                <input
-                                  type="checkbox"
-                                  name="is_popular"
-                                  checked={formData.is_popular}
-                                  onChange={(e) => setFormData(prev => ({ ...prev, is_popular: e.target.checked }))}
-                                  className="h-4 w-4 text-dimzia-primary focus:ring-dimzia-primary border-gray-300 rounded"
-                                />
-                              </td>
-                              <td className="px-6 py-4 text-right">
-                                <div className="flex justify-end space-x-2">
-                                  <button 
-                                    onClick={() => handleSaveItem(item.id)}
-                                    className="text-green-600 hover:text-green-900"
-                                  >
-                                    <Save size={18} />
-                                  </button>
-                                  <button 
-                                    onClick={() => setIsEditing(null)}
-                                    className="text-gray-600 hover:text-gray-900"
-                                  >
-                                    <X size={18} />
-                                  </button>
-                                </div>
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              <td className="px-6 py-4">
-                                <div className="flex items-center">
-                                  <img className="h-10 w-10 rounded-full object-cover mr-3" src={item.image_url} alt={item.name} />
-                                  <div>
-                                    <div className="font-medium text-gray-900">{item.name}</div>
-                                    <div className="text-sm text-gray-500 line-clamp-2">{item.description}</div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">Rp {(item.price * 15000).toLocaleString('id-ID')}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                  item.category === 'steamed' ? 'bg-blue-100 text-blue-800' :
-                                  item.category === 'fried' ? 'bg-orange-100 text-orange-800' :
-                                  item.category === 'baked' ? 'bg-yellow-100 text-yellow-800' :
-                                  item.category === 'dessert' ? 'bg-pink-100 text-pink-800' :
-                                  'bg-purple-100 text-purple-800'
-                                }`}>
-                                  {item.category}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                {item.is_popular ? (
-                                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                    Yes
-                                  </span>
-                                ) : (
-                                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                                    No
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <div className="flex justify-end space-x-2">
-                                  <button onClick={() => startEditing(item)} className="text-blue-600 hover:text-blue-900">
-                                    <Edit size={18} />
-                                  </button>
-                                  <button onClick={() => handleDeleteItem(item.id)} className="text-red-600 hover:text-red-900">
-                                    <Trash2 size={18} />
-                                  </button>
-                                </div>
-                              </td>
-                            </>
-                          )}
-                        </tr>
-                      ))}
-                      {menuItems.length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
-                            No menu items found. Add some items to get started.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-            
-            {activeTab === 'delivery' && (
-              <div>
-                <div className="mb-4">
-                  <h2 className="text-xl font-semibold mb-4">Delivery Zones</h2>
-                  
-                  <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                    <h3 className="font-medium mb-3">Add New Delivery Zone</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Zone Name</label>
-                        <input
-                          type="text"
-                          name="zone_name"
-                          value={zoneForm.zone_name}
-                          onChange={handleZoneInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-dimzia-primary"
-                          placeholder="e.g. Zone 1 (0-3 km)"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Base Price (IDR)</label>
-                        <input
-                          type="number"
-                          name="base_price"
-                          value={zoneForm.base_price}
-                          onChange={handleZoneInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-dimzia-primary"
-                          placeholder="e.g. 15000"
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-4">
-                      <button
-                        onClick={handleAddZone}
-                        className="px-4 py-2 bg-dimzia-primary text-white rounded-md hover:bg-dimzia-dark transition-colors"
-                      >
-                        Add Zone
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white rounded-lg shadow overflow-hidden">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Zone Name</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Base Price</th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {deliveryZones.map(zone => (
-                          <tr key={zone.id}>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">{zone.zone_name}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">Rp {zone.base_price.toLocaleString('id-ID')}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              <button onClick={() => handleDeleteZone(zone.id)} className="text-red-600 hover:text-red-900">
-                                <Trash2 size={18} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                        {deliveryZones.length === 0 && (
-                          <tr>
-                            <td colSpan={3} className="px-6 py-4 text-center text-gray-500">
-                              No delivery zones found. Add some zones to get started.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+  
+  // Add new zone
+  const handleAddNew = () => {
+    setEditZone({
+      zone_name: '',
+      base_price: 0
+    });
+    setIsEditing(false);
+    setDialogOpen(true);
+  };
+  
+  // Edit existing zone
+  const handleEdit = (zone: DeliveryZone) => {
+    setEditZone({ ...zone });
+    setIsEditing(true);
+    setDialogOpen(true);
+  };
+  
+  if (loading) {
+    return (
+      <div className="flex justify-center my-8">
+        <div className="animate-spin h-8 w-8 border-4 border-dimzia-primary border-t-transparent rounded-full"></div>
       </div>
+    );
+  }
+  
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-serif font-semibold">Delivery Zones</h2>
+        <Button 
+          onClick={handleAddNew}
+          className="bg-dimzia-primary hover:bg-dimzia-primary/90"
+        >
+          <Plus size={16} className="mr-2" /> Add New Zone
+        </Button>
+      </div>
+      
+      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md flex items-start gap-2">
+        <MapPin className="text-blue-500 flex-shrink-0 mt-0.5" size={18} />
+        <div>
+          <p className="text-sm text-blue-700">Store starting coordinates for delivery distance calculation:</p>
+          <p className="text-sm font-mono mt-1">-2.2612092256138, 113.92016284747595</p>
+        </div>
+      </div>
+      
+      {deliveryZones.length === 0 ? (
+        <div className="text-center py-8 border rounded-lg bg-gray-50">
+          <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500 mb-2" />
+          <p className="text-gray-600">No delivery zones found. Add your first zone to get started.</p>
+        </div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Zone Name</TableHead>
+              <TableHead>Base Price</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {deliveryZones.map(zone => (
+              <TableRow key={zone.id}>
+                <TableCell className="font-medium">{zone.zone_name}</TableCell>
+                <TableCell>Rp {zone.base_price.toLocaleString('id-ID')}</TableCell>
+                <TableCell className="text-right">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => handleEdit(zone)}
+                  >
+                    <Edit size={16} />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => handleDelete(zone.id)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+      
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{isEditing ? 'Edit Delivery Zone' : 'Add New Delivery Zone'}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="grid gap-4">
+              <Label htmlFor="zone_name">Zone Name</Label>
+              <Input 
+                id="zone_name" 
+                value={editZone.zone_name || ''} 
+                onChange={e => setEditZone({...editZone, zone_name: e.target.value})}
+                placeholder="e.g., Zone 1 (0-3 km)"
+              />
+            </div>
+            
+            <div className="grid gap-4">
+              <Label htmlFor="base_price">Base Price</Label>
+              <Input 
+                id="base_price" 
+                type="number" 
+                value={editZone.base_price || ''} 
+                onChange={e => setEditZone({...editZone, base_price: parseFloat(e.target.value)})}
+                placeholder="Price in IDR"
+              />
+            </div>
+          </div>
+          
+          <DialogFooter className="flex space-x-2 sm:justify-between">
+            <Button 
+              variant="outline" 
+              onClick={() => setDialogOpen(false)}
+            >
+              <X size={16} className="mr-2" /> Cancel
+            </Button>
+            <Button 
+              onClick={handleSave}
+              className="bg-dimzia-primary hover:bg-dimzia-primary/90"
+            >
+              <Save size={16} className="mr-2" /> {isEditing ? 'Update' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
