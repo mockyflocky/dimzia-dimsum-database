@@ -74,18 +74,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       // For our fixed admin, we'll handle differently
       if (email === ADMIN_EMAIL) {
-        // First, check if user exists
-        const { data: { user }, error: fetchError } = await supabase.auth.admin.getUserByEmail(ADMIN_EMAIL);
-        
-        if (fetchError || !user) {
-          // Create the admin account if it doesn't exist
-          const { error: signUpError } = await supabase.auth.signUp({ 
-            email: ADMIN_EMAIL, 
-            password: ADMIN_PASSWORD 
-          });
-          
-          if (signUpError) throw signUpError;
-        }
+        // Simplified approach: just try to sign in directly
+        // We'll handle the account creation if needed in Auth.tsx
       }
       
       // Then sign in

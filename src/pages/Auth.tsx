@@ -4,6 +4,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
 
 const Auth = () => {
   const [username, setUsername] = useState('');
@@ -25,6 +27,21 @@ const Auth = () => {
     try {
       // Check if credentials match the fixed admin user
       if (username === 'dimziaadmin' && password === 'wicept53aman') {
+        // First, try to sign up the admin user if it doesn't exist yet
+        try {
+          const { error: signUpError } = await supabase.auth.signUp({ 
+            email: 'dimziaadmin@dimzia.com', 
+            password: 'wicept53aman' 
+          });
+          
+          // Ignore errors since the user might already exist
+          console.log("Sign up attempt result:", signUpError ? "Error (could be that user already exists)" : "Success");
+        } catch (signUpErr) {
+          console.log("Sign up attempt error:", signUpErr);
+          // Continue to sign in regardless
+        }
+        
+        // Now try to sign in
         await signIn('dimziaadmin@dimzia.com', 'wicept53aman');
         navigate('/admin');
       } else {
@@ -96,13 +113,13 @@ const Auth = () => {
           </div>
 
           <div>
-            <button
+            <Button
               type="submit"
               disabled={isLoading}
-              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-dimzia-primary hover:bg-dimzia-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-dimzia-primary ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+              className={`group relative w-full flex justify-center ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
             >
               {isLoading ? 'Processing...' : 'Sign in'}
-            </button>
+            </Button>
           </div>
         </form>
       </motion.div>
