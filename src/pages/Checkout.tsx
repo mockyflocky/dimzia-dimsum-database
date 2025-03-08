@@ -33,13 +33,21 @@ const formSchema = z.object({
 
 const Checkout = () => {
   const navigate = useNavigate();
-  const { items, clearCart } = useCart();
+  const { cart, clearCart } = useCart();
   const { toast } = useToast();
   const { saveOrder } = useOrders();
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderNumber, setOrderNumber] = useState<number | null>(null);
   const [distance, setDistance] = useState<number | undefined>(undefined);
   const [deliveryCost, setDeliveryCost] = useState<number | undefined>(undefined);
+
+  // Extract items from cart for easier use
+  const items = cart.map(cartItem => ({
+    id: cartItem.item.id,
+    name: cartItem.item.name,
+    quantity: cartItem.quantity,
+    price: cartItem.item.price
+  }));
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),

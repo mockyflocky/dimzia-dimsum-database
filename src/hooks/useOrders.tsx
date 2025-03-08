@@ -29,13 +29,28 @@ export const OrdersProvider = ({ children }: { children: React.ReactNode }) => {
       const { data, error } = await supabase
         .from('customer_orders')
         .select('*')
-        .order('orderNumber', { ascending: false });
+        .order('ordernumber', { ascending: false });
 
       if (error) {
         throw error;
       }
 
-      setOrders(data || []);
+      if (data) {
+        const mappedOrders: CustomerOrder[] = data.map(order => ({
+          id: order.id,
+          orderNumber: order.ordernumber,
+          customerName: order.customername,
+          deliveryMethod: order.deliverymethod,
+          address: order.address || undefined,
+          distance: order.distance || undefined,
+          deliveryCost: order.deliverycost || undefined,
+          items: order.items as any,
+          totalItems: order.totalitems,
+          subtotal: order.subtotal,
+          orderDate: order.orderdate
+        }));
+        setOrders(mappedOrders);
+      }
     } catch (error: any) {
       console.error('Error fetching orders:', error.message);
       toast({
@@ -53,15 +68,15 @@ export const OrdersProvider = ({ children }: { children: React.ReactNode }) => {
       // Get the highest order number
       const { data, error } = await supabase
         .from('customer_orders')
-        .select('orderNumber')
-        .order('orderNumber', { ascending: false })
+        .select('ordernumber')
+        .order('ordernumber', { ascending: false })
         .limit(1);
 
       if (error) {
         throw error;
       }
 
-      return data && data.length > 0 ? data[0].orderNumber + 1 : 1;
+      return data && data.length > 0 ? data[0].ordernumber + 1 : 1;
     } catch (error: any) {
       console.error('Error getting next order number:', error.message);
       return orders.length > 0 
@@ -81,9 +96,24 @@ export const OrdersProvider = ({ children }: { children: React.ReactNode }) => {
         orderDate: new Date().toISOString(),
       };
 
+      // Map the model fields to database column names
+      const dbOrder = {
+        id: newOrder.id,
+        ordernumber: newOrder.orderNumber,
+        customername: newOrder.customerName,
+        deliverymethod: newOrder.deliveryMethod,
+        address: newOrder.address,
+        distance: newOrder.distance,
+        deliverycost: newOrder.deliveryCost,
+        items: newOrder.items,
+        totalitems: newOrder.totalItems,
+        subtotal: newOrder.subtotal,
+        orderdate: newOrder.orderDate
+      };
+
       const { error } = await supabase
         .from('customer_orders')
-        .insert([newOrder]);
+        .insert([dbOrder]);
 
       if (error) {
         throw error;
