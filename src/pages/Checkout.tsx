@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useCart } from '@/hooks/useCart';
+import { useOrders } from '@/hooks/useOrders';
 import { ArrowLeft, Plus, Minus, Trash2, Send, MapPin, Loader } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -24,7 +25,8 @@ const STORE_COORDINATES = {
 const COST_PER_KM = 3000;
 
 const Checkout = () => {
-  const { cart, updateQuantity, removeFromCart, totalPrice, totalItems } = useCart();
+  const { cart, updateQuantity, removeFromCart, totalPrice, totalItems, clearCart } = useCart();
+  const { saveOrder, getNextOrderNumber } = useOrders();
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(DeliveryMethod.PICKUP);
@@ -35,6 +37,20 @@ const Checkout = () => {
     longitude: null
   });
   const [isLocating, setIsLocating] = useState(false);
+  const [nextOrderNumber, setNextOrderNumber] = useState<number | null>(null);
+  const [isProcessingOrder, setIsProcessingOrder] = useState(false);
+  const [orderPlaced, setOrderPlaced] = useState(false);
+  const [orderNumber, setOrderNumber] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Load the next order number when the component mounts
+    const loadNextOrderNumber = async () => {
+      const num = await getNextOrderNumber();
+      setNextOrderNumber(num);
+    };
+    
+    loadNextOrderNumber();
+  }, [getNextOrderNumber]);
 
   useEffect(() => {
     if (deliveryMethod === DeliveryMethod.PICKUP) {
@@ -97,7 +113,7 @@ const Checkout = () => {
     return value * Math.PI / 180;
   };
 
-  const handleSendOrder = () => {
+  const handleSendOrder = async () => {
     if (!name) {
       alert('Please enter your name');
       return;
@@ -108,36 +124,76 @@ const Checkout = () => {
       return;
     }
 
-    // Format the order message for WhatsApp
-    const orderItems = cart.map(
-      ({ item, quantity }) => `${quantity}x ${item.name} (Rp ${(item.price * 15000 * quantity).toLocaleString('id-ID')})`
-    ).join('\n');
-    
-    const message = `
+    setIsProcessingOrder(true);
+
+    try {
+      // Save order to database
+      const orderItems = cart.map(({ item, quantity }) => ({
+        name: item.name,
+        quantity: quantity,
+        price: item.price * 15000
+      }));
+
+      const { success, orderNumber: newOrderNumber } = await saveOrder({
+        customerName: name,
+        deliveryMethod: deliveryMethod,
+        address: deliveryMethod === DeliveryMethod.DELIVERY ? address : undefined,
+        distance: deliveryMethod === DeliveryMethod.DELIVERY ? distance || undefined : undefined,
+        deliveryCost: deliveryMethod === DeliveryMethod.DELIVERY ? deliveryCost : undefined,
+        items: orderItems,
+        totalItems: totalItems,
+        subtotal: totalPrice * 15000,
+      });
+
+      if (success) {
+        setOrderNumber(newOrderNumber);
+        setOrderPlaced(true);
+      }
+
+      // Format the order message for WhatsApp
+      const orderItemsText = cart.map(
+        ({ item, quantity }) => `${quantity}x ${item.name} (Rp ${(item.price * 15000 * quantity).toLocaleString('id-ID')})`
+      ).join('\n');
+      
+      const message = `
 *New Order from Dimzia Dimsum*
+*ORDER #${newOrderNumber}*
 -----------------------------
 *Name:* ${name}
 *Delivery Method:* ${deliveryMethod}
 ${deliveryMethod === DeliveryMethod.DELIVERY ? 
   `*Address:* ${address}\n*Distance:* ${distance ? distance.toFixed(2) : '?'} km\n*Delivery Cost:* Rp ${deliveryCost.toLocaleString('id-ID')}\n` : ''}
 *Order Details:*
-${orderItems}
+${orderItemsText}
 -----------------------------
 *Total Items:* ${totalItems}
 *Subtotal:* Rp ${(totalPrice * 15000).toLocaleString('id-ID')}
 ${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCost.toLocaleString('id-ID')}` : ''}
-    `;
-    
-    // Create WhatsApp link (you'll replace the phone number)
-    const phoneNumber = '6281234567890'; // Replace with your actual WhatsApp number
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
-    
-    // Open WhatsApp in a new tab
-    window.open(whatsappLink, '_blank');
+      `;
+      
+      // Create WhatsApp link (you'll replace the phone number)
+      const phoneNumber = '6281234567890'; // Replace with your actual WhatsApp number
+      const encodedMessage = encodeURIComponent(message);
+      const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
+      
+      if (success) {
+        // Clear the cart after successful order
+        setTimeout(() => {
+          clearCart();
+        }, 3000);
+        
+        // Open WhatsApp in a new tab
+        window.open(whatsappLink, '_blank');
+      }
+    } catch (error) {
+      console.error("Error processing order:", error);
+      alert("There was an error processing your order. Please try again.");
+    } finally {
+      setIsProcessingOrder(false);
+    }
   };
 
-  if (cart.length === 0) {
+  if (cart.length === 0 && !orderPlaced) {
     return (
       <div className="min-h-screen pt-20 pb-16 flex flex-col items-center justify-center">
         <div className="text-center p-8 max-w-xl">
@@ -150,6 +206,43 @@ ${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCo
               className="px-6 py-3 bg-dimzia-primary text-white rounded-full font-medium"
             >
               Browse Menu
+            </motion.button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (orderPlaced) {
+    return (
+      <div className="min-h-screen pt-20 pb-16 flex flex-col items-center justify-center">
+        <div className="text-center p-8 max-w-xl">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="mb-6 w-24 h-24 rounded-full bg-green-100 flex items-center justify-center mx-auto"
+          >
+            <svg className="w-12 h-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </motion.div>
+          
+          <h1 className="font-serif text-3xl font-bold text-gray-900 mb-4">Order Placed!</h1>
+          <p className="text-gray-600 mb-6">Your order has been sent to WhatsApp.</p>
+          
+          <div className="bg-dimzia-primary bg-opacity-10 rounded-lg p-4 mb-6">
+            <p className="font-medium text-dimzia-primary">Your Order Number</p>
+            <p className="text-4xl font-bold text-dimzia-primary">{orderNumber}</p>
+          </div>
+          
+          <Link to="/catalog">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-6 py-3 bg-dimzia-primary text-white rounded-full font-medium"
+            >
+              Order More
             </motion.button>
           </Link>
         </div>
@@ -175,6 +268,19 @@ ${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCo
         >
           Checkout
         </motion.h1>
+
+        {nextOrderNumber && (
+          <div className="bg-dimzia-primary bg-opacity-10 rounded-lg p-4 mb-6 flex items-center justify-between">
+            <div>
+              <p className="font-medium text-dimzia-primary">Your Order Number</p>
+              <p className="text-3xl font-bold text-dimzia-primary">#{nextOrderNumber}</p>
+            </div>
+            <div className="text-right text-sm text-dimzia-primary/80">
+              <p>Please mention this number</p>
+              <p>when contacting us about your order</p>
+            </div>
+          </div>
+        )}
 
         {/* Order items */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
@@ -324,10 +430,20 @@ ${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCo
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleSendOrder}
-          className="w-full flex items-center justify-center gap-2 bg-dimzia-primary text-white py-3 px-6 rounded-md font-semibold text-lg"
+          disabled={isProcessingOrder}
+          className={`w-full flex items-center justify-center gap-2 bg-dimzia-primary text-white py-3 px-6 rounded-md font-semibold text-lg ${isProcessingOrder ? 'opacity-70 cursor-not-allowed' : ''}`}
         >
-          <Send size={20} />
-          Send Order via WhatsApp
+          {isProcessingOrder ? (
+            <>
+              <Loader size={20} className="animate-spin" />
+              Processing Order...
+            </>
+          ) : (
+            <>
+              <Send size={20} />
+              Send Order via WhatsApp
+            </>
+          )}
         </motion.button>
       </div>
     </div>

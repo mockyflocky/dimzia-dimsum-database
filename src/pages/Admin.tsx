@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
+import { useOrders } from '@/hooks/useOrders';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Plus, 
@@ -12,7 +13,9 @@ import {
   X, 
   AlertTriangle, 
   Image as ImageIcon,
-  MapPin 
+  MapPin,
+  Receipt,
+  Calendar 
 } from 'lucide-react';
 import { 
   Table, 
@@ -36,6 +39,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 
 // Define types for menu items and delivery zones
 interface MenuItem {
@@ -102,9 +106,10 @@ const Admin = () => {
         </motion.h1>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-2 w-full max-w-md mb-6">
+          <TabsList className="grid grid-cols-3 w-full max-w-md mb-6">
             <TabsTrigger value="menu">Menu Management</TabsTrigger>
             <TabsTrigger value="delivery">Delivery Zones</TabsTrigger>
+            <TabsTrigger value="orders">Order Logs</TabsTrigger>
           </TabsList>
           
           <TabsContent value="menu">
@@ -114,8 +119,153 @@ const Admin = () => {
           <TabsContent value="delivery">
             <DeliveryManagement />
           </TabsContent>
+
+          <TabsContent value="orders">
+            <OrdersManagement />
+          </TabsContent>
         </Tabs>
       </div>
+    </div>
+  );
+};
+
+// New Orders Management Component
+const OrdersManagement = () => {
+  const { orders, isLoading } = useOrders();
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  // View order details
+  const handleViewOrder = (order: any) => {
+    setSelectedOrder(order);
+    setDialogOpen(true);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center my-8">
+        <div className="animate-spin h-8 w-8 border-4 border-dimzia-primary border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-serif font-semibold">Customer Orders</h2>
+      </div>
+
+      {orders.length === 0 ? (
+        <div className="text-center py-8 border rounded-lg bg-gray-50">
+          <Receipt className="mx-auto h-12 w-12 text-gray-400 mb-2" />
+          <p className="text-gray-600">No orders have been logged yet.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[80px]">Order #</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Items</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Delivery</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {orders.map(order => (
+                <TableRow key={order.id}>
+                  <TableCell className="font-medium">#{order.orderNumber}</TableCell>
+                  <TableCell>
+                    {format(new Date(order.orderDate), 'dd/MM/yyyy HH:mm')}
+                  </TableCell>
+                  <TableCell>{order.customerName}</TableCell>
+                  <TableCell>{order.totalItems} items</TableCell>
+                  <TableCell>Rp {order.subtotal.toLocaleString('id-ID')}</TableCell>
+                  <TableCell>{order.deliveryMethod}</TableCell>
+                  <TableCell className="text-right">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleViewOrder(order)}
+                    >
+                      View Details
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {/* Order Details Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Order #{selectedOrder?.orderNumber} Details</DialogTitle>
+          </DialogHeader>
+          
+          {selectedOrder && (
+            <div className="space-y-4 py-4">
+              <div className="flex justify-between items-center text-sm text-gray-500">
+                <div className="flex items-center">
+                  <Calendar size={14} className="mr-1"/>
+                  {format(new Date(selectedOrder.orderDate), 'dd/MM/yyyy HH:mm')}
+                </div>
+              </div>
+              
+              <div className="border-b pb-2">
+                <p className="font-medium">Customer Information</p>
+                <p>Name: {selectedOrder.customerName}</p>
+                <p>Delivery Method: {selectedOrder.deliveryMethod}</p>
+                
+                {selectedOrder.deliveryMethod === 'Delivery (20 min+)' && (
+                  <>
+                    <p>Address: {selectedOrder.address}</p>
+                    {selectedOrder.distance && (
+                      <p>Distance: {selectedOrder.distance.toFixed(2)} km</p>
+                    )}
+                    {selectedOrder.deliveryCost && (
+                      <p>Delivery Cost: Rp {selectedOrder.deliveryCost.toLocaleString('id-ID')}</p>
+                    )}
+                  </>
+                )}
+              </div>
+              
+              <div>
+                <p className="font-medium mb-2">Order Items</p>
+                <div className="space-y-2">
+                  {selectedOrder.items.map((item: any, index: number) => (
+                    <div key={index} className="flex justify-between">
+                      <span>{item.quantity}x {item.name}</span>
+                      <span>Rp {item.price.toLocaleString('id-ID')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="border-t pt-2">
+                <div className="flex justify-between font-medium">
+                  <span>Subtotal:</span>
+                  <span>Rp {selectedOrder.subtotal.toLocaleString('id-ID')}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setDialogOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -5,20 +5,14 @@ import { useNavigate, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 
 const Auth = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { user, signIn } = useAuth();
+  const { user, adminLogin } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-
-  // Admin credentials
-  const ADMIN_USERNAME = 'dimziaadmin';
-  const ADMIN_PASSWORD = 'wicept53aman';
-  const ADMIN_EMAIL = 'admin@dimzia.com';
 
   // Redirect if already logged in
   if (user) {
@@ -30,31 +24,11 @@ const Auth = () => {
     setIsLoading(true);
 
     try {
-      // Check if credentials match the fixed admin user
-      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-        // First, try to sign up the admin user if it doesn't exist yet
-        try {
-          const { error: signUpError } = await supabase.auth.signUp({ 
-            email: ADMIN_EMAIL, 
-            password: ADMIN_PASSWORD 
-          });
-          
-          // Ignore errors since the user might already exist
-          console.log("Sign up attempt result:", signUpError ? "Error (could be that user already exists)" : "Success");
-        } catch (signUpErr) {
-          console.log("Sign up attempt error:", signUpErr);
-          // Continue to sign in regardless
-        }
-        
-        // Now try to sign in
-        await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
+      // Use the adminLogin method from our hook
+      const success = await adminLogin(username, password);
+      
+      if (success) {
         navigate('/admin');
-      } else {
-        toast({
-          title: "Login failed",
-          description: "Invalid username or password",
-          variant: "destructive"
-        });
       }
     } catch (error) {
       console.error('Authentication error:', error);
