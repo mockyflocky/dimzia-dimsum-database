@@ -17,7 +17,7 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Fixed admin credentials
-const ADMIN_EMAIL = 'dimziaadmin@dimzia.com';
+const ADMIN_EMAIL = 'admin@dimzia.com';
 const ADMIN_PASSWORD = 'wicept53aman';
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -72,13 +72,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      // For our fixed admin, we'll handle differently
-      if (email === ADMIN_EMAIL) {
-        // Simplified approach: just try to sign in directly
-        // We'll handle the account creation if needed in Auth.tsx
-      }
-      
-      // Then sign in
       const { data, error } = await supabase.auth.signInWithPassword({ 
         email, 
         password 

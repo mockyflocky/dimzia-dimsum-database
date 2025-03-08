@@ -15,6 +15,11 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Admin credentials
+  const ADMIN_USERNAME = 'dimziaadmin';
+  const ADMIN_PASSWORD = 'wicept53aman';
+  const ADMIN_EMAIL = 'admin@dimzia.com';
+
   // Redirect if already logged in
   if (user) {
     return <Navigate to="/admin" replace />;
@@ -26,12 +31,12 @@ const Auth = () => {
 
     try {
       // Check if credentials match the fixed admin user
-      if (username === 'dimziaadmin' && password === 'wicept53aman') {
+      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
         // First, try to sign up the admin user if it doesn't exist yet
         try {
           const { error: signUpError } = await supabase.auth.signUp({ 
-            email: 'dimziaadmin@dimzia.com', 
-            password: 'wicept53aman' 
+            email: ADMIN_EMAIL, 
+            password: ADMIN_PASSWORD 
           });
           
           // Ignore errors since the user might already exist
@@ -42,7 +47,7 @@ const Auth = () => {
         }
         
         // Now try to sign in
-        await signIn('dimziaadmin@dimzia.com', 'wicept53aman');
+        await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
         navigate('/admin');
       } else {
         toast({

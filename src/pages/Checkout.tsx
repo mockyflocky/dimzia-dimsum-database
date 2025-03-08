@@ -125,7 +125,7 @@ ${orderItems}
 -----------------------------
 *Total Items:* ${totalItems}
 *Subtotal:* Rp ${(totalPrice * 15000).toLocaleString('id-ID')}
-${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCost.toLocaleString('id-ID')}\n*Grand Total:* Rp ${(totalPrice * 15000 + deliveryCost).toLocaleString('id-ID')}` : ''}
+${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCost.toLocaleString('id-ID')}` : ''}
     `;
     
     // Create WhatsApp link (you'll replace the phone number)
@@ -234,15 +234,8 @@ ${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCo
           
           {deliveryMethod === DeliveryMethod.DELIVERY && (
             <div className="flex justify-between pt-2 text-lg">
-              <span>Delivery:</span>
+              <span>Delivery Cost Estimation:</span>
               <span>Rp {deliveryCost.toLocaleString('id-ID')}</span>
-            </div>
-          )}
-          
-          {deliveryMethod === DeliveryMethod.DELIVERY && (
-            <div className="flex justify-between pt-2 font-bold text-lg text-dimzia-primary">
-              <span>Total:</span>
-              <span>Rp {(totalPrice * 15000 + deliveryCost).toLocaleString('id-ID')}</span>
             </div>
           )}
         </div>
@@ -302,7 +295,7 @@ ${deliveryMethod === DeliveryMethod.DELIVERY ? `*Delivery Cost:* Rp ${deliveryCo
                     {coordinates.latitude && coordinates.longitude && !isLocating && (
                       <AnimatedText
                         text={`Location detected! Distance: ${distance?.toFixed(2)} km (Delivery: Rp ${deliveryCost.toLocaleString('id-ID')})`}
-                        className="text-xs text-blue-600 mt-2"
+                        className="text-base font-bold text-dimzia-primary mt-2"
                         animation="fade"
                         type="word"
                       />
