@@ -27,48 +27,6 @@ export type Database = {
         }
         Relationships: []
       }
-      customer_orders: {
-        Row: {
-          address: string | null
-          customername: string
-          deliverycost: number | null
-          deliverymethod: string
-          distance: number | null
-          id: string
-          items: Json
-          orderdate: string
-          ordernumber: number
-          subtotal: number
-          totalitems: number
-        }
-        Insert: {
-          address?: string | null
-          customername: string
-          deliverycost?: number | null
-          deliverymethod: string
-          distance?: number | null
-          id?: string
-          items: Json
-          orderdate?: string
-          ordernumber: number
-          subtotal: number
-          totalitems: number
-        }
-        Update: {
-          address?: string | null
-          customername?: string
-          deliverycost?: number | null
-          deliverymethod?: string
-          distance?: number | null
-          id?: string
-          items?: Json
-          orderdate?: string
-          ordernumber?: number
-          subtotal?: number
-          totalitems?: number
-        }
-        Relationships: []
-      }
       delivery_zones: {
         Row: {
           base_price: number
