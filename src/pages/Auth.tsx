@@ -12,7 +12,7 @@ const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { user, signIn, signUp } = useAuth();
+  const { user, signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -70,74 +70,82 @@ const Auth = () => {
     }
   };
 
+  const handleAdminDirectSignIn = async () => {
+    try {
+      // First, check if the user exists by trying to sign in
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD
+      });
+      
+      if (signInError) {
+        // If sign in fails because user doesn't exist, create the user
+        if (signInError.message?.includes('Invalid login credentials')) {
+          console.log("Admin user doesn't exist, creating...");
+          
+          // Create admin user with direct sign up
+          // Note: This will create a user without requiring email verification
+          const { data: adminData, error: adminError } = await supabase.auth.admin.createUser({
+            email: ADMIN_EMAIL,
+            password: ADMIN_PASSWORD,
+            email_confirm: true, // Skip email verification
+            user_metadata: { role: 'admin' }
+          });
+          
+          if (adminError) {
+            throw adminError;
+          }
+          
+          if (adminData?.user) {
+            // Create the admin user record
+            await createAdminUserRecord(adminData.user.id);
+            
+            // Sign in with the new account
+            await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
+            navigate('/admin');
+            
+            toast({
+              title: "Admin account created",
+              description: "Successfully created and logged in as admin",
+            });
+          }
+        } else {
+          throw signInError;
+        }
+      } else if (signInData?.user) {
+        // User exists, create admin record if needed
+        await createAdminUserRecord(signInData.user.id);
+        
+        // Update the Auth context
+        navigate('/admin');
+        
+        toast({
+          title: "Logged in successfully",
+          description: "Welcome back, admin!",
+        });
+      }
+    } catch (error) {
+      console.error("Admin authentication error:", error);
+      toast({
+        title: "Admin login failed",
+        description: error.message || "Please check Supabase permissions",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    console.log("Attempting login with email:", email, "password:", password ? "***" : "");
-
+    
     try {
-      // Check if credentials match the fixed admin user
+      // For admin credentials, use the direct method
       if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-        try {
-          // Try to sign in first
-          console.log("Attempting to sign in admin user");
-          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email: ADMIN_EMAIL,
-            password: ADMIN_PASSWORD
-          });
-          
-          if (signInError) {
-            console.log("Sign in attempt error:", signInError);
-            
-            // If sign in fails, try to sign up
-            if (signInError.message?.includes('Invalid login credentials')) {
-              try {
-                console.log("Attempting to sign up admin user");
-                const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ 
-                  email: ADMIN_EMAIL, 
-                  password: ADMIN_PASSWORD 
-                });
-                
-                if (signUpError) {
-                  console.log("Sign up attempt error:", signUpError);
-                  throw signUpError;
-                }
-                
-                if (signUpData.user) {
-                  // Create admin record after successful signup
-                  await createAdminUserRecord(signUpData.user.id);
-                  
-                  console.log("Sign up successful, attempting to sign in again");
-                  // Try to sign in again after sign up
-                  await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
-                  navigate('/admin');
-                }
-              } catch (signUpErr) {
-                console.log("Sign up error:", signUpErr);
-                throw signUpErr;
-              }
-            } else {
-              throw signInError;
-            }
-          } else if (signInData.user) {
-            // Create admin record after successful signin if it doesn't exist
-            await createAdminUserRecord(signInData.user.id);
-            navigate('/admin');
-          }
-        } catch (authErr) {
-          console.error('Authentication error:', authErr);
-          toast({
-            title: "Login failed",
-            description: authErr.message || "Please check your credentials and try again",
-            variant: "destructive"
-          });
-        }
+        await handleAdminDirectSignIn();
       } else {
-        toast({
-          title: "Login failed",
-          description: "Invalid email or password",
-          variant: "destructive"
-        });
+        // For non-admin users, use the regular sign-in flow
+        await signIn(email, password);
+        navigate('/admin');
       }
     } catch (error: any) {
       console.error('Authentication error:', error);
