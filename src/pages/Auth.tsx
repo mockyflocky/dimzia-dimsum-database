@@ -5,6 +5,7 @@ import { useNavigate, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 
 const Auth = () => {
@@ -15,8 +16,8 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Admin credentials - updated to use email directly
-  const ADMIN_EMAIL = 'admin@dimzia.com';
+  // Admin credentials - updated to use valid email format
+  const ADMIN_EMAIL = 'admin@example.com';
   const ADMIN_PASSWORD = 'wicept53aman';
 
   // Redirect if already logged in
@@ -31,23 +32,33 @@ const Auth = () => {
     try {
       // Check if credentials match the fixed admin user
       if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-        // First, try to sign up the admin user if it doesn't exist yet
         try {
-          const { error: signUpError } = await supabase.auth.signUp({ 
-            email: ADMIN_EMAIL, 
-            password: ADMIN_PASSWORD 
-          });
+          // Try to sign in first
+          await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
+          navigate('/admin');
+        } catch (signInErr) {
+          console.log("Sign in attempt error:", signInErr);
           
-          // Ignore errors since the user might already exist
-          console.log("Sign up attempt result:", signUpError ? "Error (could be that user already exists)" : "Success");
-        } catch (signUpErr) {
-          console.log("Sign up attempt error:", signUpErr);
-          // Continue to sign in regardless
+          // If sign in fails, try to sign up
+          try {
+            const { error: signUpError } = await supabase.auth.signUp({ 
+              email: ADMIN_EMAIL, 
+              password: ADMIN_PASSWORD 
+            });
+            
+            if (signUpError) {
+              console.log("Sign up attempt error:", signUpError);
+              throw signUpError;
+            }
+            
+            // Try to sign in again after sign up
+            await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
+            navigate('/admin');
+          } catch (signUpErr) {
+            console.log("Sign up error:", signUpErr);
+            throw signUpErr;
+          }
         }
-        
-        // Now try to sign in
-        await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
-        navigate('/admin');
       } else {
         toast({
           title: "Login failed",
@@ -88,7 +99,7 @@ const Auth = () => {
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="email" className="sr-only">Email</label>
-              <input
+              <Input
                 id="email"
                 name="email"
                 type="email"
@@ -102,7 +113,7 @@ const Auth = () => {
             </div>
             <div>
               <label htmlFor="password" className="sr-only">Password</label>
-              <input
+              <Input
                 id="password"
                 name="password"
                 type="password"

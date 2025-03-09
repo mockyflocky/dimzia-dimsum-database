@@ -17,7 +17,7 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Fixed admin credentials - updated to use email directly
-const ADMIN_EMAIL = 'admin@dimzia.com';
+const ADMIN_EMAIL = 'admin@example.com'; // Changed to a valid email format
 const ADMIN_PASSWORD = 'wicept53aman';
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
