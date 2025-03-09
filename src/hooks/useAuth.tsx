@@ -16,7 +16,7 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Fixed admin credentials
+// Fixed admin credentials - updated to use email directly
 const ADMIN_EMAIL = 'admin@dimzia.com';
 const ADMIN_PASSWORD = 'wicept53aman';
 

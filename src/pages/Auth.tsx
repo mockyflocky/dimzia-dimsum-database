@@ -8,17 +8,16 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 
 const Auth = () => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { user, signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Admin credentials
-  const ADMIN_USERNAME = 'dimziaadmin';
-  const ADMIN_PASSWORD = 'wicept53aman';
+  // Admin credentials - updated to use email directly
   const ADMIN_EMAIL = 'admin@dimzia.com';
+  const ADMIN_PASSWORD = 'wicept53aman';
 
   // Redirect if already logged in
   if (user) {
@@ -31,7 +30,7 @@ const Auth = () => {
 
     try {
       // Check if credentials match the fixed admin user
-      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+      if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
         // First, try to sign up the admin user if it doesn't exist yet
         try {
           const { error: signUpError } = await supabase.auth.signUp({ 
@@ -52,7 +51,7 @@ const Auth = () => {
       } else {
         toast({
           title: "Login failed",
-          description: "Invalid username or password",
+          description: "Invalid email or password",
           variant: "destructive"
         });
       }
@@ -88,17 +87,17 @@ const Auth = () => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label htmlFor="username" className="sr-only">Username</label>
+              <label htmlFor="email" className="sr-only">Email</label>
               <input
-                id="username"
-                name="username"
-                type="text"
-                autoComplete="username"
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
                 required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-dimzia-primary focus:border-dimzia-primary focus:z-10 sm:text-sm"
-                placeholder="Username"
+                placeholder="Email"
               />
             </div>
             <div>
