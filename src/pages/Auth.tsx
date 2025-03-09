@@ -12,11 +12,11 @@ const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { user, signIn } = useAuth();
+  const { user, signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Admin credentials - updated to use valid email format
+  // Admin credentials
   const ADMIN_EMAIL = 'admin@example.com';
   const ADMIN_PASSWORD = 'wicept53aman';
 
@@ -24,6 +24,51 @@ const Auth = () => {
   if (user) {
     return <Navigate to="/admin" replace />;
   }
+
+  const createAdminUserRecord = async (userId) => {
+    try {
+      console.log("Attempting to create admin user record for user ID:", userId);
+      
+      // Check if admin record already exists for this user
+      const { data: existingAdmin, error: checkError } = await supabase
+        .from('admin_users')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        console.error("Error checking for existing admin:", checkError);
+        throw checkError;
+      }
+      
+      // If admin record already exists, return
+      if (existingAdmin) {
+        console.log("Admin record already exists:", existingAdmin);
+        return;
+      }
+      
+      // Insert admin record
+      const { data, error } = await supabase
+        .from('admin_users')
+        .insert([{ user_id: userId }])
+        .select();
+      
+      if (error) {
+        console.error("Failed to create admin record:", error);
+        throw error;
+      }
+      
+      console.log("Successfully created admin user record:", data);
+      return data;
+    } catch (error) {
+      console.error("Error in createAdminUserRecord:", error);
+      toast({
+        title: "Failed to create admin record",
+        description: error.message || "An error occurred",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,47 +81,56 @@ const Auth = () => {
         try {
           // Try to sign in first
           console.log("Attempting to sign in admin user");
-          await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
-          navigate('/admin');
-        } catch (signInErr: any) {
-          console.log("Sign in attempt error:", signInErr);
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: ADMIN_EMAIL,
+            password: ADMIN_PASSWORD
+          });
           
-          // If sign in fails, try to sign up
-          if (signInErr.message?.includes('Invalid login credentials')) {
-            try {
-              console.log("Attempting to sign up admin user");
-              const { error: signUpError } = await supabase.auth.signUp({ 
-                email: ADMIN_EMAIL, 
-                password: ADMIN_PASSWORD 
-              });
-              
-              if (signUpError) {
-                console.log("Sign up attempt error:", signUpError);
+          if (signInError) {
+            console.log("Sign in attempt error:", signInError);
+            
+            // If sign in fails, try to sign up
+            if (signInError.message?.includes('Invalid login credentials')) {
+              try {
+                console.log("Attempting to sign up admin user");
+                const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ 
+                  email: ADMIN_EMAIL, 
+                  password: ADMIN_PASSWORD 
+                });
                 
-                // If the error is about the email being invalid, it's likely a Supabase configuration issue
-                if (signUpError.message?.includes('Email address') && signUpError.message?.includes('is invalid')) {
-                  toast({
-                    title: "Authentication configuration issue",
-                    description: "Please contact the administrator to configure Supabase authentication properly.",
-                    variant: "destructive"
-                  });
-                  
+                if (signUpError) {
+                  console.log("Sign up attempt error:", signUpError);
                   throw signUpError;
                 }
-              } else {
-                console.log("Sign up successful, attempting to sign in again");
+                
+                if (signUpData.user) {
+                  // Create admin record after successful signup
+                  await createAdminUserRecord(signUpData.user.id);
+                  
+                  console.log("Sign up successful, attempting to sign in again");
+                  // Try to sign in again after sign up
+                  await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
+                  navigate('/admin');
+                }
+              } catch (signUpErr) {
+                console.log("Sign up error:", signUpErr);
+                throw signUpErr;
               }
-              
-              // Try to sign in again after sign up
-              await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
-              navigate('/admin');
-            } catch (signUpErr) {
-              console.log("Sign up error:", signUpErr);
-              throw signUpErr;
+            } else {
+              throw signInError;
             }
-          } else {
-            throw signInErr;
+          } else if (signInData.user) {
+            // Create admin record after successful signin if it doesn't exist
+            await createAdminUserRecord(signInData.user.id);
+            navigate('/admin');
           }
+        } catch (authErr) {
+          console.error('Authentication error:', authErr);
+          toast({
+            title: "Login failed",
+            description: authErr.message || "Please check your credentials and try again",
+            variant: "destructive"
+          });
         }
       } else {
         toast({
@@ -154,6 +208,11 @@ const Auth = () => {
             >
               {isLoading ? 'Processing...' : 'Sign in'}
             </Button>
+          </div>
+
+          <div className="text-center text-sm text-gray-600">
+            <p>Default admin: admin@example.com</p>
+            <p>Default password: wicept53aman</p>
           </div>
         </form>
       </motion.div>
