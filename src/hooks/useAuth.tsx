@@ -16,8 +16,8 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Fixed admin credentials - updated to use email directly
-const ADMIN_EMAIL = 'admin@example.com'; // Changed to a valid email format
+// Hard-coded admin credentials
+const ADMIN_EMAIL = 'admin@example.com';
 const ADMIN_PASSWORD = 'wicept53aman';
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -30,6 +30,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, currentSession) => {
+        console.log("Auth state changed:", event, currentSession?.user?.email);
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
         setIsLoading(false);
@@ -39,6 +40,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // Get initial session
     const initializeAuth = async () => {
       const { data: { session: initialSession } } = await supabase.auth.getSession();
+      console.log("Initial session:", initialSession?.user?.email);
       setSession(initialSession);
       setUser(initialSession?.user ?? null);
       
@@ -58,7 +60,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Simple check for fixed admin
   const checkAdminStatus = (email?: string) => {
-    setIsAdmin(email === ADMIN_EMAIL);
+    const isAdminUser = email === ADMIN_EMAIL;
+    console.log("Checking admin status for:", email, "Result:", isAdminUser);
+    setIsAdmin(isAdminUser);
   };
 
   // When user changes, check admin status
@@ -72,12 +76,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
+      console.log("Attempting sign in with:", email);
       const { data, error } = await supabase.auth.signInWithPassword({ 
         email, 
         password 
       });
       
       if (error) {
+        console.error("Sign in error:", error.message);
         throw error;
       }
       
@@ -90,6 +96,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         description: 'Welcome back!',
       });
     } catch (error: any) {
+      console.error("Sign in catch error:", error);
       toast({
         title: 'Sign in failed',
         description: error.message || 'An error occurred during sign in',
@@ -101,9 +108,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signUp = async (email: string, password: string) => {
     try {
+      console.log("Attempting sign up with:", email);
       const { error } = await supabase.auth.signUp({ email, password });
       
       if (error) {
+        console.error("Sign up error:", error.message);
         throw error;
       }
       
@@ -112,6 +121,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         description: 'Please check your email for the confirmation link',
       });
     } catch (error: any) {
+      console.error("Sign up catch error:", error);
       toast({
         title: 'Sign up failed',
         description: error.message || 'An error occurred during sign up',

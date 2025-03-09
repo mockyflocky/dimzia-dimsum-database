@@ -28,35 +28,54 @@ const Auth = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    console.log("Attempting login with email:", email, "password:", password ? "***" : "");
 
     try {
       // Check if credentials match the fixed admin user
       if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
         try {
           // Try to sign in first
+          console.log("Attempting to sign in admin user");
           await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
           navigate('/admin');
-        } catch (signInErr) {
+        } catch (signInErr: any) {
           console.log("Sign in attempt error:", signInErr);
           
           // If sign in fails, try to sign up
-          try {
-            const { error: signUpError } = await supabase.auth.signUp({ 
-              email: ADMIN_EMAIL, 
-              password: ADMIN_PASSWORD 
-            });
-            
-            if (signUpError) {
-              console.log("Sign up attempt error:", signUpError);
-              throw signUpError;
+          if (signInErr.message?.includes('Invalid login credentials')) {
+            try {
+              console.log("Attempting to sign up admin user");
+              const { error: signUpError } = await supabase.auth.signUp({ 
+                email: ADMIN_EMAIL, 
+                password: ADMIN_PASSWORD 
+              });
+              
+              if (signUpError) {
+                console.log("Sign up attempt error:", signUpError);
+                
+                // If the error is about the email being invalid, it's likely a Supabase configuration issue
+                if (signUpError.message?.includes('Email address') && signUpError.message?.includes('is invalid')) {
+                  toast({
+                    title: "Authentication configuration issue",
+                    description: "Please contact the administrator to configure Supabase authentication properly.",
+                    variant: "destructive"
+                  });
+                  
+                  throw signUpError;
+                }
+              } else {
+                console.log("Sign up successful, attempting to sign in again");
+              }
+              
+              // Try to sign in again after sign up
+              await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
+              navigate('/admin');
+            } catch (signUpErr) {
+              console.log("Sign up error:", signUpErr);
+              throw signUpErr;
             }
-            
-            // Try to sign in again after sign up
-            await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
-            navigate('/admin');
-          } catch (signUpErr) {
-            console.log("Sign up error:", signUpErr);
-            throw signUpErr;
+          } else {
+            throw signInErr;
           }
         }
       } else {
@@ -66,11 +85,11 @@ const Auth = () => {
           variant: "destructive"
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Authentication error:', error);
       toast({
         title: "Login failed",
-        description: "Please check your credentials and try again",
+        description: error.message || "Please check your credentials and try again",
         variant: "destructive"
       });
     } finally {
