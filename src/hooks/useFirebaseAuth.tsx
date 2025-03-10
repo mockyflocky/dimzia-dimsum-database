@@ -7,7 +7,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, firestore } from '@/integrations/firebase/client';
 import { useToast } from './use-toast';
 
@@ -22,9 +22,8 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Hard-coded admin credentials (same as before)
+// Admin tetap hardcoded seperti pada kode sebelumnya
 const ADMIN_EMAIL = 'admin@example.com';
-const ADMIN_PASSWORD = 'wicept53aman';
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -49,25 +48,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
-  // Check if user is admin
+  // Memeriksa apakah pengguna adalah admin
   const checkAdminStatus = async (email?: string | null) => {
-    // Simple check for fixed admin email
+    // Cek sederhana untuk admin email yang hardcoded
     const isAdminUser = email === ADMIN_EMAIL;
     console.log("Checking admin status for:", email, "Result:", isAdminUser);
     setIsAdmin(isAdminUser);
     
     if (isAdminUser && user) {
-      // Ensure admin record exists in Firestore
+      // Pastikan record admin ada di Firestore
       await createAdminUserRecord(user.uid);
     }
   };
 
-  // Create admin user record in Firestore
+  // Membuat record admin user di Firestore
   const createAdminUserRecord = async (userId: string) => {
     try {
       console.log("Attempting to create admin user record for user ID:", userId);
       
-      // Check if admin record already exists
+      // Cek apakah record admin sudah ada
       const adminDocRef = doc(firestore, "admin_users", userId);
       const adminDocSnap = await getDoc(adminDocRef);
       
@@ -76,7 +75,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return;
       }
       
-      // Create admin record
+      // Membuat record admin
       await setDoc(adminDocRef, { 
         user_id: userId,
         created_at: new Date().toISOString()
@@ -120,7 +119,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signUp = async (email: string, password: string) => {
     try {
       console.log("Attempting sign up with:", email);
-      const result = await createUserWithEmailAndPassword(auth, email, password);
+      await createUserWithEmailAndPassword(auth, email, password);
       
       toast({
         title: 'Sign up successful',
