@@ -64,10 +64,14 @@ export const getCollection = async (collectionName: string, orderByField?: strin
   }
   
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
+  const result = querySnapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      ...data
+    };
+  });
+  return result;
 };
 
 // Delete a document

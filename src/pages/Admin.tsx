@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { 
   Plus, 
   Trash2, 
@@ -36,6 +35,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { getCollection, setDocument, deleteDocument, menuItemsRef, deliveryZonesRef } from '@/integrations/firebase/client';
 
 // Define types for menu items and delivery zones
 interface MenuItem {
@@ -129,19 +129,12 @@ const MenuManagement = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
   
-  // Load menu items
+  // Load menu items from Firebase
   useEffect(() => {
     const fetchMenuItems = async () => {
       try {
-        const { data, error } = await supabase
-          .from('menu_items')
-          .select('*')
-          .order('category', { ascending: true })
-          .order('name', { ascending: true });
-        
-        if (error) throw error;
-        
-        setMenuItems(data || []);
+        const data = await getCollection('menu_items', 'category', 'asc');
+        setMenuItems(data as MenuItem[]);
       } catch (error: any) {
         console.error('Error fetching menu items:', error.message);
         toast({
@@ -176,17 +169,13 @@ const MenuManagement = () => {
         price: Number(editItem.price),
         image_url: editItem.image_url || null,
         category: editItem.category,
-        is_popular: editItem.is_popular || false
+        is_popular: editItem.is_popular || false,
+        updated_at: new Date().toISOString()
       };
       
       if (isEditing && editItem.id) {
         // Update existing item
-        const { error } = await supabase
-          .from('menu_items')
-          .update(item)
-          .eq('id', editItem.id);
-        
-        if (error) throw error;
+        await setDocument('menu_items', editItem.id, item);
         
         // Update local state
         setMenuItems(prev => 
@@ -198,18 +187,23 @@ const MenuManagement = () => {
           description: "Menu item updated successfully.",
         });
       } else {
-        // Create new item
-        const { data, error } = await supabase
-          .from('menu_items')
-          .insert([item])
-          .select();
+        // Create new item with additional fields for new items
+        const newItem = {
+          ...item,
+          created_at: new Date().toISOString()
+        };
         
-        if (error) throw error;
+        // Generate a unique ID
+        const uniqueId = Date.now().toString();
+        await setDocument('menu_items', uniqueId, newItem);
         
         // Update local state
-        if (data) {
-          setMenuItems(prev => [...prev, data[0] as MenuItem]);
-        }
+        const createdItem = {
+          id: uniqueId,
+          ...newItem
+        } as MenuItem;
+        
+        setMenuItems(prev => [...prev, createdItem]);
         
         toast({
           title: "Success",
@@ -236,12 +230,7 @@ const MenuManagement = () => {
     if (!confirm("Are you sure you want to delete this item?")) return;
     
     try {
-      const { error } = await supabase
-        .from('menu_items')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await deleteDocument('menu_items', id);
       
       // Update local state
       setMenuItems(prev => prev.filter(item => item.id !== id));
@@ -460,18 +449,12 @@ const DeliveryManagement = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
   
-  // Load delivery zones
+  // Load delivery zones from Firebase
   useEffect(() => {
     const fetchDeliveryZones = async () => {
       try {
-        const { data, error } = await supabase
-          .from('delivery_zones')
-          .select('*')
-          .order('base_price', { ascending: true });
-        
-        if (error) throw error;
-        
-        setDeliveryZones(data || []);
+        const data = await getCollection('delivery_zones', 'base_price', 'asc');
+        setDeliveryZones(data as DeliveryZone[]);
       } catch (error: any) {
         console.error('Error fetching delivery zones:', error.message);
         toast({
@@ -507,12 +490,7 @@ const DeliveryManagement = () => {
       
       if (isEditing && editZone.id) {
         // Update existing zone
-        const { error } = await supabase
-          .from('delivery_zones')
-          .update(zone)
-          .eq('id', editZone.id);
-        
-        if (error) throw error;
+        await setDocument('delivery_zones', editZone.id, zone);
         
         // Update local state
         setDeliveryZones(prev => 
@@ -524,18 +502,23 @@ const DeliveryManagement = () => {
           description: "Delivery zone updated successfully.",
         });
       } else {
-        // Create new zone
-        const { data, error } = await supabase
-          .from('delivery_zones')
-          .insert([zone])
-          .select();
+        // Create new zone with additional fields for new items
+        const newZone = {
+          ...zone,
+          created_at: new Date().toISOString()
+        };
         
-        if (error) throw error;
+        // Generate a unique ID
+        const uniqueId = Date.now().toString();
+        await setDocument('delivery_zones', uniqueId, newZone);
         
         // Update local state
-        if (data) {
-          setDeliveryZones(prev => [...prev, data[0] as DeliveryZone]);
-        }
+        const createdZone = {
+          id: uniqueId,
+          ...newZone
+        } as DeliveryZone;
+        
+        setDeliveryZones(prev => [...prev, createdZone]);
         
         toast({
           title: "Success",
@@ -562,12 +545,7 @@ const DeliveryManagement = () => {
     if (!confirm("Are you sure you want to delete this zone?")) return;
     
     try {
-      const { error } = await supabase
-        .from('delivery_zones')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await deleteDocument('delivery_zones', id);
       
       // Update local state
       setDeliveryZones(prev => prev.filter(zone => zone.id !== id));
