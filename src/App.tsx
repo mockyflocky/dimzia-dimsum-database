@@ -12,7 +12,7 @@ import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import { CartProvider } from "./hooks/useCart";
-import { AuthProvider } from "./hooks/useAuth";
+import { AuthProvider } from "./hooks/useFirebaseAuth";
 import CartIcon from "./components/CartIcon";
 
 const queryClient = new QueryClient();

@@ -1,18 +1,19 @@
 
 import { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { supabase } from '@/integrations/supabase/client';
+import { doc, setDoc } from 'firebase/firestore';
+import { firestore } from '@/integrations/firebase/client';
 
 const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { user, signIn } = useAuth();
+  const { user, signIn, isAdmin } = useFirebaseAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -25,110 +26,22 @@ const Auth = () => {
     return <Navigate to="/admin" replace />;
   }
 
-  const createAdminUserRecord = async (userId) => {
+  const createAdminUserRecord = async (userId: string) => {
     try {
       console.log("Attempting to create admin user record for user ID:", userId);
       
-      // Check if admin record already exists for this user
-      const { data: existingAdmin, error: checkError } = await supabase
-        .from('admin_users')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
+      // Create admin record in Firestore
+      await setDoc(doc(firestore, "admin_users", userId), {
+        user_id: userId,
+        created_at: new Date().toISOString()
+      });
       
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
-        console.error("Error checking for existing admin:", checkError);
-        throw checkError;
-      }
-      
-      // If admin record already exists, return
-      if (existingAdmin) {
-        console.log("Admin record already exists:", existingAdmin);
-        return;
-      }
-      
-      // Insert admin record
-      const { data, error } = await supabase
-        .from('admin_users')
-        .insert([{ user_id: userId }])
-        .select();
-      
-      if (error) {
-        console.error("Failed to create admin record:", error);
-        throw error;
-      }
-      
-      console.log("Successfully created admin user record:", data);
-      return data;
-    } catch (error) {
+      console.log("Successfully created admin user record");
+    } catch (error: any) {
       console.error("Error in createAdminUserRecord:", error);
       toast({
         title: "Failed to create admin record",
         description: error.message || "An error occurred",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleAdminDirectSignIn = async () => {
-    try {
-      // First, check if the user exists by trying to sign in
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD
-      });
-      
-      if (signInError) {
-        // If sign in fails because user doesn't exist, create the user
-        if (signInError.message?.includes('Invalid login credentials')) {
-          console.log("Admin user doesn't exist, creating...");
-          
-          // Create admin user with direct sign up
-          // Note: This will create a user without requiring email verification
-          const { data: adminData, error: adminError } = await supabase.auth.admin.createUser({
-            email: ADMIN_EMAIL,
-            password: ADMIN_PASSWORD,
-            email_confirm: true, // Skip email verification
-            user_metadata: { role: 'admin' }
-          });
-          
-          if (adminError) {
-            throw adminError;
-          }
-          
-          if (adminData?.user) {
-            // Create the admin user record
-            await createAdminUserRecord(adminData.user.id);
-            
-            // Sign in with the new account
-            await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
-            navigate('/admin');
-            
-            toast({
-              title: "Admin account created",
-              description: "Successfully created and logged in as admin",
-            });
-          }
-        } else {
-          throw signInError;
-        }
-      } else if (signInData?.user) {
-        // User exists, create admin record if needed
-        await createAdminUserRecord(signInData.user.id);
-        
-        // Update the Auth context
-        navigate('/admin');
-        
-        toast({
-          title: "Logged in successfully",
-          description: "Welcome back, admin!",
-        });
-      }
-    } catch (error) {
-      console.error("Admin authentication error:", error);
-      toast({
-        title: "Admin login failed",
-        description: error.message || "Please check Supabase permissions",
         variant: "destructive"
       });
     }
@@ -139,14 +52,9 @@ const Auth = () => {
     setIsLoading(true);
     
     try {
-      // For admin credentials, use the direct method
-      if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-        await handleAdminDirectSignIn();
-      } else {
-        // For non-admin users, use the regular sign-in flow
-        await signIn(email, password);
-        navigate('/admin');
-      }
+      // Sign in with Firebase
+      await signIn(email, password);
+      navigate('/admin');
     } catch (error: any) {
       console.error('Authentication error:', error);
       toast({
